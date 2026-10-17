@@ -31,3 +31,6 @@ site/
 
 # OS
 .DS_Store
+
+# shared MkDocs base config, fetched at build time
+/.mkdocs/
