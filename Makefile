@@ -19,6 +19,7 @@ docs:
 	cd dbt && dbt docs generate --profiles-dir . && dbt docs serve --profiles-dir .
 
 blog:
+	mkdir -p .mkdocs && curl -sSfL -o .mkdocs/base.yml https://raw.githubusercontent.com/mazino2d/github-workflows/v1/mkdocs/base.yml
 	mkdocs serve
 
 dagster:

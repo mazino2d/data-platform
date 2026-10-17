@@ -1,3 +1,6 @@
+# Theme and Markdown setup come from mazino2d/github-workflows (mkdocs/base.yml).
+INHERIT: .mkdocs/base.yml
+
 site_name: Data Engineering Blog
 site_description: Principles and patterns in data engineering, demonstrated with a real pipeline.
 site_url: https://mazino2d.github.io/jaffle-shop/
@@ -5,27 +8,7 @@ site_author: mazino2d
 copyright: Copyright &copy; 2025 mazino2d
 
 theme:
-  name: material
   custom_dir: overrides
-  palette:
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-  features:
-    - navigation.top
-    - search.highlight
-    - search.suggest
-    - content.code.copy
-    - toc.follow
 
 plugins:
   - search
@@ -48,15 +31,3 @@ extra:
 
 nav:
   - Home: index.md
-
-validation:
-  links:
-    unrecognized_links: ignore
-
-markdown_extensions:
-  - pymdownx.highlight:
-      anchor_linenums: true
-  - pymdownx.superfences
-  - pymdownx.inlinehilite
-  - admonition
-  - pymdownx.details

@@ -138,8 +138,12 @@ Never skip hooks with `--no-verify`. Fix the underlying issue instead.
 
 ### CI workflows (`.github/workflows/`)
 
+Each workflow is a thin caller of a reusable workflow in [mazino2d/github-workflows](https://github.com/mazino2d/github-workflows) (`@v1`); the logic lives there.
+
 | Workflow | Trigger | Does |
 |---|---|---|
-| `ci.yml` | PR + push `main` (dbt/dlt changes) | pre-commit lint, dlt ingest + `dbt build` on local DuckDB |
-| `docker-image.yml` | PR + push `main` (dag/dbt/dlt/Dockerfile changes) | build image, `dagster definitions validate`; push to GHCR on `main` |
-| `dbt-docs.yml` | push `main` | build MkDocs + dbt docs, deploy to GitHub Pages |
+| `ci.yml` | PR + push `main` (dbt/dlt changes) | pre-commit lint, dlt ingest + `dbt build` on local DuckDB; actionlint + CodeQL on workflows |
+| `docker.yml` | PR + push `main` (dag/dbt/dlt/Dockerfile changes) | build image, `dagster definitions validate`; push to GHCR on `main` and open the dev bump PR in everything-as-code |
+| `docs.yml` | PR (build only) + push `main` | build MkDocs + dbt docs, deploy to GitHub Pages |
+
+`mkdocs.yml` inherits the shared theme from `.mkdocs/base.yml` (fetched by the workflow, and by `make blog` locally).

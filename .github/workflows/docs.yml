@@ -1,0 +1,51 @@
+name: Docs
+
+# Blog (MkDocs) with the dbt docs site under /dbt-docs. Pull requests only
+# build; main deploys to GitHub Pages.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - "dbt/**"
+      - "dlt/**"
+      - "docs/**"
+      - "overrides/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    uses: mazino2d/github-workflows/.github/workflows/pages.yml@v1
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    with:
+      generator: mkdocs
+      python-version: "3.11"
+      install: pip install -e ".[dev]"
+      pre-build: |
+        python dlt/pipeline.py
+        cd dbt
+        dbt deps --profiles-dir .
+        dbt docs generate --profiles-dir .
+      post-build: cp -r dbt/target _site/dbt-docs
+      paths: |
+        dbt/**
+        dlt/**
+        docs/**
+        overrides/**
+        mkdocs.yml
+        pyproject.toml
+        .github/workflows/docs.yml
