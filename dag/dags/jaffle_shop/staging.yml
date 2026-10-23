@@ -1,0 +1,15 @@
+name: jaffle_shop_staging
+description: "Clean and normalize raw source data into staging views."
+dbt_command: build
+# Staging models read the SK maps (tagged intermediate) and the seed, so build
+# their parents too; the snapshots already ran upstream.
+dbt_selector: "+tag:staging,tag:jaffle_shop"
+dbt_exclude: "resource_type:snapshot"
+
+trigger:
+  type: upstream
+  depends_on: jaffle_shop_snapshots
+
+retry:
+  max_retries: 2
+  retry_delay_minutes: 5

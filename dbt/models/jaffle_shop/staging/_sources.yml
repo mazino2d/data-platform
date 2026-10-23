@@ -1,8 +1,10 @@
 version: 2
 
 sources:
-  - name: raw
-    description: "Raw tables loaded by the dlt ingestion pipeline."
+  - name: jaffle_shop
+    description: "Raw tables loaded by the dlt ingestion pipeline (dlt/pipeline.py jaffle_shop)."
+    # Same dataset the pipeline writes to: jaffle_shop_raw on prod, <target>_jaffle_shop_raw elsewhere.
+    schema: "{{ 'jaffle_shop_raw' if target.name == 'prod' else target.schema ~ '_jaffle_shop_raw' }}"
 
     tables:
       - name: customers

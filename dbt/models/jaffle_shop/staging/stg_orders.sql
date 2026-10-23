@@ -35,8 +35,8 @@ SELECT
     customer_master_sk,
     status,
     amount,
-    placed_at::TIMESTAMP AS placed_at,
-    updated_at::TIMESTAMP AS updated_at,
+    CAST(placed_at AS TIMESTAMP) AS placed_at,
+    CAST(updated_at AS TIMESTAMP) AS updated_at,
     valid_from,
     valid_to,
     is_current

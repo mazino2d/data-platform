@@ -1,14 +1,16 @@
 [sqlfluff]
-dialect = duckdb
-templater = dbt
+dialect = bigquery
+# The jinja templater with dbt builtins lints without a warehouse connection;
+# the dbt templater would need BigQuery credentials just to compile.
+templater = jinja
 # RF02: reference qualification — disabled because dbt ref() calls are unqualified
 exclude_rules = RF02
 max_line_length = 120
 sql_file_exts = .sql
 
-[sqlfluff:templater:dbt]
-project_dir = ./dbt
-profiles_dir = ./dbt
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
+load_macros_from_path = ./dbt/macros
 
 [sqlfluff:rules:layout.indent]
 indent_unit = space

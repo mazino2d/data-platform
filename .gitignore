@@ -10,20 +10,14 @@ build/
 .env
 *.env.local
 
-# DuckDB databases
-*.duckdb
-*.duckdb.wal
-
 # dbt
 dbt/target/
 dbt/dbt_packages/
 dbt/logs/
 dbt/.user.yml
 
-# Dagster
-.dagster/
-dagster_home/
-.tmp_dagster*
+# Google auth credentials written by google-github-actions/auth
+gha-creds-*.json
 
 # MkDocs
 site/

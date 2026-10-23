@@ -9,7 +9,7 @@ Open a PR against `main` for the current changes, following this repo's conventi
 
 ## 1. Prepare the branch
 
-1. `git status` and `git diff` (staged + unstaged) to see what will ship. Do not include unrelated files, secrets (`.env`) or local artefacts (`*.duckdb`, `.tmp_dagster*`, `site/`, `dbt/target/`).
+1. `git status` and `git diff` (staged + unstaged) to see what will ship. Do not include unrelated files, secrets (`.env`) or local artefacts (`gha-creds-*.json`, `site/`, `dbt/target/`).
 2. If on `main`, create a branch: `<type>/<short-kebab-desc>`.
 3. If SQL changed, run `make lint` (or `make fix`) first.
 
@@ -37,14 +37,14 @@ Body template (English, Markdown). Drop any section that has nothing to say:
 <Follow-ups, things intentionally left out, manual steps after merge, breaking changes.>
 
 ## Test plan
-- [ ] <CI job that must pass, e.g. `CI / dbt build`, `Docker image / Build`>
-- [ ] <Manual verification, e.g. `make pipeline`, Dagster UI run>
+- [ ] <CI job that must pass, e.g. `CI / dbt`, `CI / lint / gate`>
+- [ ] <Manual verification, e.g. `make pipeline` against a dev dataset>
 ```
 
 Guidelines:
 - Describe the change for a reviewer who has not seen the conversation. Do not narrate how you got there.
 - Name files and components, not line numbers. Keep it scannable, short enough to read in under a minute.
-- Say which workflows the PR triggers (`ci.yml`, `docker-image.yml`, `dbt-docs.yml`) and anything that happens on merge (e.g. an image push to GHCR, a docs deploy).
+- Say which workflows the PR triggers (`ci.yml`, `docs.yml`, generated `dag-*.yml`) and anything that happens on merge (e.g. a docs deploy, a new scheduled pipeline).
 - End the body with the attribution line given in the session's system reminder, if there is one.
 
 ## 4. Push and open

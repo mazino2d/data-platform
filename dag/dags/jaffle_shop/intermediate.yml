@@ -1,0 +1,12 @@
+name: jaffle_shop_intermediate
+description: "Business logic joins across staging models."
+dbt_command: build
+dbt_selector: "tag:jaffle_shop,tag:intermediate"
+
+trigger:
+  type: upstream
+  depends_on: jaffle_shop_staging
+
+retry:
+  max_retries: 2
+  retry_delay_minutes: 5

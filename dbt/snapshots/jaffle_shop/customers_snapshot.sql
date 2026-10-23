@@ -16,8 +16,8 @@
         email,
         country,
         status,
-        created_at::TIMESTAMP AS created_at,
-        updated_at::TIMESTAMP AS updated_at
-    FROM {{ source("raw", "customers") }}
+        CAST(created_at AS TIMESTAMP) AS created_at,
+        CAST(updated_at AS TIMESTAMP) AS updated_at
+    FROM {{ source("jaffle_shop", "customers") }}
 
 {% endsnapshot %}

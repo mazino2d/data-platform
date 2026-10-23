@@ -11,8 +11,6 @@ repos:
     rev: 3.3.0
     hooks:
       - id: sqlfluff-lint
-        args: [--dialect, duckdb]
-        additional_dependencies:
-          - sqlfluff-templater-dbt
-          - dbt-core
-          - dbt-duckdb
+        # Models only: snapshots use dbt's {% snapshot %} tag, which the jinja
+        # templater does not know.
+        files: ^dbt/models/

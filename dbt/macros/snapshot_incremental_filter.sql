@@ -16,7 +16,7 @@
     {%- set updated_at_col = model.config.get("updated_at") -%}
 
     {%- if relation is not none and updated_at_col -%}
-        WHERE {{ updated_at_col }} >= CURRENT_DATE - INTERVAL '{{ lookback_days }} days'
+        WHERE {{ updated_at_col }} >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {{ lookback_days }} DAY)
     {%- endif -%}
 
 {% endmacro %}

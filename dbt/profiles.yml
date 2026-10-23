@@ -1,15 +1,34 @@
-jaffle_shop:
+# BigQuery through Application Default Credentials: `gcloud auth application-default
+# login` locally, google-github-actions/auth (Workload Identity Federation) in CI.
+# Datasets are <target dataset>_<custom schema> except on prod, which uses the
+# custom schema alone (macros/generate_schema_name.sql).
+data_platform:
   target: dev
   outputs:
     dev:
-      type: duckdb
-      path: "{{ env_var('DUCKDB_DEV_PATH', '../jaffle_shop_dev.duckdb') }}"
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID', 'dataplatform-as-se1-prd') }}"
+      dataset: "dev_{{ env_var('USER', 'local') | replace('-', '_') }}"
+      location: asia-southeast1
       threads: 4
+      job_execution_timeout_seconds: 300
+      maximum_bytes_billed: 1000000000
+    ci:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID', 'dataplatform-as-se1-prd') }}"
+      dataset: "{{ env_var('DBT_CI_DATASET') }}"
+      location: asia-southeast1
+      threads: 4
+      job_execution_timeout_seconds: 300
+      maximum_bytes_billed: 1000000000
     prod:
-      type: duckdb
-      path: "{{ env_var('DUCKDB_PROD_PATH', '../jaffle_shop_prod.duckdb') }}"
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID', 'dataplatform-as-se1-prd') }}"
+      dataset: prod
+      location: asia-southeast1
       threads: 4
-    cloud:
-      type: duckdb
-      path: "md:jaffle_shop"
-      threads: 4
+      job_execution_timeout_seconds: 600
+      maximum_bytes_billed: 10000000000

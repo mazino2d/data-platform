@@ -18,7 +18,7 @@ SELECT
     dc.total_orders,
 
     -- Derived ratios
-    DATEDIFF('day', dc.last_order_at, CURRENT_TIMESTAMP)
+    TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), dc.last_order_at, DAY)
         AS days_since_last_order,
     CASE
         WHEN dc.total_orders > 0
@@ -33,14 +33,14 @@ SELECT
     END AS avg_order_value,
 
     -- Tenure: days since first order
-    DATEDIFF('day', dc.first_order_at, CURRENT_TIMESTAMP)
+    TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), dc.first_order_at, DAY)
         AS customer_tenure_days,
 
     -- Order cadence: avg days between orders (null if fewer than 2 orders)
     CASE
         WHEN dc.total_orders >= 2
             THEN
-                DATEDIFF('day', dc.first_order_at, dc.last_order_at)
+                TIMESTAMP_DIFF(dc.last_order_at, dc.first_order_at, DAY)
                 * 1.0 / (dc.total_orders - 1)
     END AS avg_days_between_orders
 FROM {{ ref("dim_customers") }} AS dc

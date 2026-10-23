@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://mazino2d.github.io/jaffle-shop/sitemap.xml
+Sitemap: https://mazino2d.github.io/data-platform/sitemap.xml

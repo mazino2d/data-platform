@@ -1,8 +1,8 @@
-name: jaffle_shop
+name: data_platform
 version: "1.0.0"
 config-version: 2
 
-profile: jaffle_shop
+profile: data_platform
 
 model-paths: ["models"]
 snapshot-paths: ["snapshots"]
@@ -14,23 +14,38 @@ macro-paths: ["macros"]
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 
+# One folder per project under models/, snapshots/ and seeds/. Each layer lands
+# in its own BigQuery dataset named <project>_<layer> (see generate_schema_name).
 models:
-  jaffle_shop:
-    staging:
-      +materialized: view
-      +tags: ["staging"]
-    intermediate:
-      +materialized: view
-      +tags: ["intermediate"]
-    marts:
-      core:
-        +materialized: table
-        +tags: ["core"]
-      features:
-        +materialized: table
-        +tags: ["features"]
+  data_platform:
+    jaffle_shop:
+      +tags: ["jaffle_shop"]
+      staging:
+        +schema: jaffle_shop_staging
+        +materialized: view
+        +tags: ["staging"]
+      intermediate:
+        +schema: jaffle_shop_intermediate
+        +materialized: view
+        +tags: ["intermediate"]
+      marts:
+        core:
+          +schema: jaffle_shop_marts
+          +materialized: table
+          +tags: ["core"]
+        features:
+          +schema: jaffle_shop_features
+          +materialized: table
+          +tags: ["features"]
 
 snapshots:
-  jaffle_shop:
-    +tags: ["snapshots"]
-    +target_schema: snapshots
+  data_platform:
+    jaffle_shop:
+      +schema: jaffle_shop_snapshots
+      +tags: ["jaffle_shop", "snapshots"]
+
+seeds:
+  data_platform:
+    jaffle_shop:
+      +schema: jaffle_shop_seeds
+      +tags: ["jaffle_shop"]

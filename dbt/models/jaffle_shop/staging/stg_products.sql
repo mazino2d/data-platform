@@ -25,8 +25,8 @@ SELECT
     category,
     price,
     is_active,
-    created_at::TIMESTAMP AS created_at,
-    updated_at::TIMESTAMP AS updated_at,
+    CAST(created_at AS TIMESTAMP) AS created_at,
+    CAST(updated_at AS TIMESTAMP) AS updated_at,
     valid_from,
     valid_to,
     is_current

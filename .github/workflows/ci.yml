@@ -18,25 +18,56 @@ jobs:
     uses: mazino2d/github-workflows/.github/workflows/python-ci.yml@v1
     with:
       python-version: "3.11"
-      paths: &ci-paths |
+      paths: |
+        dag/**
         dbt/**
         dlt/**
         pyproject.toml
+        .sqlfluff
         .pre-commit-config.yaml
-        .github/workflows/ci.yml
+        .github/workflows/**
       run: |
-        cd dbt && dbt deps --profiles-dir .
         pre-commit run --all-files
+        python -m dag.render --check
 
+  # Local rather than python-ci.yml: it needs id-token write for Workload
+  # Identity Federation. Ingests and builds everything into throwaway ci_<run>_*
+  # datasets, then drops them. Fork pull requests get no OIDC token, so it
+  # skips when the GCP variables are not available.
   dbt:
-    uses: mazino2d/github-workflows/.github/workflows/python-ci.yml@v1
-    with:
-      python-version: "3.11"
-      paths: *ci-paths
-      run: |
-        cd dbt && dbt deps --profiles-dir .
-        python dlt/pipeline.py
-        cd dbt && dbt build --profiles-dir .
+    if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DBT_TARGET: ci
+      DBT_CI_DATASET: ci_${{ github.run_id }}_${{ github.run_attempt }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e .
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      - name: Ingest
+        run: python dlt/pipeline.py jaffle_shop
+      - name: dbt build
+        run: |
+          cd dbt
+          dbt deps --profiles-dir .
+          dbt build --profiles-dir . --target ci
+      - name: Drop CI datasets
+        if: always()
+        run: python scripts/drop_datasets.py "$DBT_CI_DATASET"
 
   workflows:
     if: github.event_name == 'pull_request'

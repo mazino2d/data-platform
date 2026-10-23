@@ -3,22 +3,14 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "jaffle-shop"
+name = "data-platform"
 version = "0.1.0"
-description = "Demo data pipeline: dlt + DuckDB + dbt + Dagster"
+description = "Data platform for mazino2d projects: dlt + BigQuery + dbt, orchestrated from YAML DAGs"
 requires-python = ">=3.11"
 dependencies = [
-    "dlt[duckdb,motherduck,parquet]>=1.4",
-    "dbt-core>=1.8",
-    "dbt-duckdb>=1.8",
-    # Keep in lockstep with the Dagster Helm chart version (webserver/daemon images)
-    "dagster==1.13.24",
-    "dagster-dbt==0.29.24",
-    # Runs execute in the code server (DefaultRunLauncher) and load the Postgres-backed instance
-    "dagster-postgres==0.29.24",
-    # SQLAlchemy 2.1 defaults postgresql:// to psycopg (v3); dagster-postgres ships psycopg2
-    "sqlalchemy>=2.0,<2.1",
-    "dagster-webserver==1.13.24",
+    "dlt[bigquery,parquet]>=1.4",
+    "dbt-core>=1.10,<1.11",
+    "dbt-bigquery>=1.10,<1.11",
     "faker>=24",
     "pyyaml>=6",
     "python-dotenv>=1.0",
@@ -27,7 +19,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "sqlfluff>=3.0",
-    "sqlfluff-templater-dbt>=3.0",
     "pre-commit>=3.0",
     "pip-tools>=7.0",
     "mkdocs-material[imaging]>=9.0",
