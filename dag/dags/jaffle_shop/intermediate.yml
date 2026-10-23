@@ -2,6 +2,9 @@ name: jaffle_shop_intermediate
 description: "Business logic joins across staging models."
 dbt_command: build
 dbt_selector: "tag:jaffle_shop,tag:intermediate"
+# The SK maps are intermediate but staging reads them, so the staging task
+# already built them.
+dbt_exclude: "+tag:staging"
 
 trigger:
   type: upstream

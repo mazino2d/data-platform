@@ -86,9 +86,14 @@ def _stable_items(order_id: int) -> list[tuple[int, int, float]]:
     ]
 
 
+def _timestamp_columns(*names):
+    """Column hints so ISO strings load as TIMESTAMP, not STRING."""
+    return {n: {"data_type": "timestamp"} for n in names}
+
+
 # ── SCD resources ──────────────────────────────────────────────────────────
 
-@dlt.resource(name="customers", write_disposition="replace", primary_key="id")
+@dlt.resource(name="customers", write_disposition="replace", primary_key="id", columns=_timestamp_columns("created_at", "updated_at"))
 def customers():
     """Customer master data — updated in-place on the backend (SCD source)."""
     state = dlt.current.source_state()
@@ -141,7 +146,7 @@ def customers():
         }
 
 
-@dlt.resource(name="products", write_disposition="replace", primary_key="id")
+@dlt.resource(name="products", write_disposition="replace", primary_key="id", columns=_timestamp_columns("created_at", "updated_at"))
 def products():
     """Product catalog — prices and availability can change (SCD source)."""
     state = dlt.current.source_state()
@@ -188,7 +193,7 @@ def products():
         }
 
 
-@dlt.resource(name="orders", write_disposition="replace", primary_key="id")
+@dlt.resource(name="orders", write_disposition="replace", primary_key="id", columns=_timestamp_columns("placed_at", "updated_at"))
 def orders():
     """Order records — status transitions over time (SCD source)."""
     state = dlt.current.source_state()
@@ -239,7 +244,7 @@ def orders():
 
 # ── Append-only resources ──────────────────────────────────────────────────
 
-@dlt.resource(name="payments", write_disposition="append", primary_key="id")
+@dlt.resource(name="payments", write_disposition="append", primary_key="id", columns=_timestamp_columns("created_at"))
 def payments():
     """Payment events — immutable log, append-only.
 
@@ -273,7 +278,7 @@ def payments():
     res_state["last_order_id"] = total_orders
 
 
-@dlt.resource(name="order_items", write_disposition="append", primary_key="id")
+@dlt.resource(name="order_items", write_disposition="append", primary_key="id", columns=_timestamp_columns("created_at"))
 def order_items():
     """Line items per order — immutable log, append-only.
 

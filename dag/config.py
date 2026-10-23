@@ -43,6 +43,12 @@ def load_tasks():
         trigger = cfg["trigger"]
         if trigger["type"] == "upstream" and trigger["depends_on"] not in tasks:
             raise ValueError(f"{cfg['path']}: unknown upstream task {trigger['depends_on']}")
+
+    # A task that no cron root reaches (a depends_on cycle) would never be scheduled.
+    scheduled = {name for order in pipelines(tasks).values() for name in order}
+    for name, cfg in tasks.items():
+        if name not in scheduled:
+            raise ValueError(f"{cfg['path']}: {name} is not reachable from a cron task (depends_on cycle?)")
     return tasks
 
 

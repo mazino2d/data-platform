@@ -15,6 +15,7 @@ GCP_PROJECT_ID.
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -42,7 +43,8 @@ def dataset_name(source_name):
         return f"{source_name}_raw"
     if target == "ci":
         return f"{os.environ['DBT_CI_DATASET']}_{source_name}_raw"
-    user = os.getenv("USER", "local").replace("-", "_")
+    # Same rule as the dev dataset in dbt/profiles.yml.
+    user = re.sub(r"[^A-Za-z0-9_]", "_", os.getenv("USER", "local"))
     return f"dev_{user}_{source_name}_raw"
 
 

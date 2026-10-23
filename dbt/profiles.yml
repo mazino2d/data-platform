@@ -9,7 +9,8 @@ data_platform:
       type: bigquery
       method: oauth
       project: "{{ env_var('GCP_PROJECT_ID', 'dataplatform-as-se1-prd') }}"
-      dataset: "dev_{{ env_var('USER', 'local') | replace('-', '_') }}"
+      # BigQuery dataset IDs allow only letters, digits and underscores (khoi.do → khoi_do).
+      dataset: "dev_{{ modules.re.sub('[^A-Za-z0-9_]', '_', env_var('USER', 'local')) }}"
       location: asia-southeast1
       threads: 4
       job_execution_timeout_seconds: 300

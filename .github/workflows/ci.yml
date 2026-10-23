@@ -27,17 +27,44 @@ jobs:
         .pre-commit-config.yaml
         .github/workflows/**
       # sqlfluff first, as annotations, so SQL failures show on the PR without opening logs.
+      # The pre-commit sqlfluff hook is skipped since the line above already linted.
       run: |
         sqlfluff lint dbt/models --format github-annotation-native
-        pre-commit run --all-files
+        SKIP=sqlfluff-lint pre-commit run --all-files
         python -m dag.render --check
+
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pipeline: ${{ steps.filter.outputs.pipeline }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            pipeline:
+              - dbt/**
+              - dlt/**
+              - scripts/**
+              - pyproject.toml
+              - .github/workflows/ci.yml
 
   # Local rather than python-ci.yml: it needs id-token write for Workload
   # Identity Federation. Ingests and builds everything into throwaway ci_<run>_*
-  # datasets, then drops them. Fork pull requests get no OIDC token, so it
-  # skips when the GCP variables are not available.
+  # datasets, then drops them. Runs only when the pipeline changed, and never for
+  # fork pull requests, which get no OIDC token (repo variables still reach them,
+  # so the check is on the head repo, not on the variables).
   dbt:
-    if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != ''
+    needs: changes
+    if: >-
+      needs.changes.outputs.pipeline == 'true' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:

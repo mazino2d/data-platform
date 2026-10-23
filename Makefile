@@ -2,6 +2,10 @@
 
 SOURCE ?= jaffle_shop
 
+# dlt reads .env itself; export it so dbt (env_var, DBT_TARGET) sees the same values.
+-include .env
+export
+
 ingest:
 	python dlt/pipeline.py $(SOURCE)
 
