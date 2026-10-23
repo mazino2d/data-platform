@@ -26,7 +26,9 @@ jobs:
         .sqlfluff
         .pre-commit-config.yaml
         .github/workflows/**
+      # sqlfluff first, as annotations, so SQL failures show on the PR without opening logs.
       run: |
+        sqlfluff lint dbt/models --format github-annotation-native
         pre-commit run --all-files
         python -m dag.render --check
 
