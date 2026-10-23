@@ -28,8 +28,8 @@ SELECT
     email,
     country,
     status,
-    CAST(created_at AS TIMESTAMP) AS created_at,
-    CAST(updated_at AS TIMESTAMP) AS updated_at,
+    created_at,
+    updated_at,
     valid_from,
     valid_to,
     is_current

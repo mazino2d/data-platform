@@ -22,5 +22,5 @@ SELECT
     method AS payment_method,
     status AS payment_status,
     amount,
-    CAST(created_at AS TIMESTAMP) AS created_at
+    created_at
 FROM _enriched

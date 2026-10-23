@@ -18,7 +18,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "sqlfluff>=3.0",
+    # Same minor as the sqlfluff-lint hook rev in .pre-commit-config.yaml
+    "sqlfluff>=3.3,<3.4",
     "pre-commit>=3.0",
     "pip-tools>=7.0",
     "mkdocs-material[imaging]>=9.0",

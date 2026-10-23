@@ -32,6 +32,6 @@ SELECT
     product_master_sk,
     quantity,
     unit_price,
-    CAST(created_at AS TIMESTAMP) AS created_at,
+    created_at,
     (quantity * unit_price) AS line_total
 FROM _enriched
