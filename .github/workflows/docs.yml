@@ -40,8 +40,14 @@ jobs:
       pre-build: |
         cd dbt
         dbt deps --profiles-dir .
+        # docs generate --no-compile does not write manifest.json, which the
+        # docs site loads, so parse first.
+        dbt parse --profiles-dir . --target prod
         dbt docs generate --profiles-dir . --target prod --no-compile --empty-catalog
-      post-build: cp -r dbt/target _site/dbt-docs
+      # Only the files the docs site loads.
+      post-build: |
+        mkdir -p _site/dbt-docs
+        cp dbt/target/index.html dbt/target/manifest.json dbt/target/catalog.json _site/dbt-docs/
       paths: |
         dbt/**
         dlt/**
