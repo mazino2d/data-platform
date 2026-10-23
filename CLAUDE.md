@@ -168,7 +168,7 @@ Workflows are thin callers of reusable workflows in [mazino2d/github-workflows](
 | Workflow | Trigger | Does |
 |---|---|---|
 | `ci.yml` | PR + push `main` | `lint`: pre-commit + `dag.render --check`; `dbt` (local): dlt ingest + `dbt build` into `ci_<run>_*` datasets, then drops them; actionlint + CodeQL |
-| `docs.yml` | PR (build only) + push `main` | build MkDocs + dbt docs (prod catalog), deploy to GitHub Pages |
+| `docs.yml` | PR (build only) + push `main` | build MkDocs + dbt docs (`--no-compile --empty-catalog`: lineage and YAML docs only, no BigQuery access), deploy to GitHub Pages |
 | `dag-task.yml` | called by `dag-*.yml` | run one DAG task against prod |
 | `dag-*.yml` | cron + manual (generated) | one pipeline per cron task |
 

@@ -35,13 +35,12 @@ jobs:
       generator: mkdocs
       python-version: "3.11"
       install: pip install -e ".[dev]"
-      # dbt docs read the prod catalog from BigQuery.
-      gcp-workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-      gcp-service-account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      # Docs from the parsed manifest only: no compile and no catalog, so no
+      # BigQuery connection or credentials, and no table stats on the public site.
       pre-build: |
         cd dbt
         dbt deps --profiles-dir .
-        GCP_PROJECT_ID=${{ vars.GCP_PROJECT_ID }} dbt docs generate --profiles-dir . --target prod
+        dbt docs generate --profiles-dir . --target prod --no-compile --empty-catalog
       post-build: cp -r dbt/target _site/dbt-docs
       paths: |
         dbt/**
