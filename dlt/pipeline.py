@@ -1,14 +1,21 @@
 """
-Entry point for running the dlt ingestion pipeline.
+Entry point for running a dlt ingestion pipeline.
 
 Usage:
-    python dlt/pipeline.py
+    python dlt/pipeline.py <source>        e.g. python dlt/pipeline.py jaffle_shop
 
-Loads all Jaffle Shop tables into DuckDB under the 'raw' dataset.
-Run this script to simulate a daily backend sync.
+Loads the source into BigQuery, in the dataset dbt reads it from (see
+dbt/macros/generate_schema_name.sql):
+    DBT_TARGET=prod  → <source>_raw
+    DBT_TARGET=ci    → $DBT_CI_DATASET_<source>_raw
+    DBT_TARGET=dev   → dev_$USER_<source>_raw
+
+Credentials come from Application Default Credentials; the project from
+GCP_PROJECT_ID.
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -23,19 +30,39 @@ from sources.jaffle_shop import jaffle_shop
 
 load_dotenv()
 
-DUCKDB_PATH = os.getenv("DUCKDB_DEV_PATH", "./jaffle_shop_dev.duckdb")
+SOURCES = {
+    "jaffle_shop": jaffle_shop,
+}
+
+LOCATION = "asia-southeast1"
 
 
-def run():
+def dataset_name(source_name):
+    target = os.getenv("DBT_TARGET", "dev")
+    if target == "prod":
+        return f"{source_name}_raw"
+    if target == "ci":
+        return f"{os.environ['DBT_CI_DATASET']}_{source_name}_raw"
+    # Same rule as the dev dataset in dbt/profiles.yml.
+    user = re.sub(r"[^A-Za-z0-9_]", "_", os.getenv("USER", "local"))
+    return f"dev_{user}_{source_name}_raw"
+
+
+def run(source_name):
     pipeline = dlt.pipeline(
-        pipeline_name="jaffle_shop",
-        destination=dlt.destinations.duckdb(DUCKDB_PATH),
-        dataset_name="raw",
+        pipeline_name=source_name,
+        destination=dlt.destinations.bigquery(
+            location=LOCATION,
+            project_id=os.getenv("GCP_PROJECT_ID", "dataplatform-as-se1-prd"),
+        ),
+        dataset_name=dataset_name(source_name),
     )
 
-    load_info = pipeline.run(jaffle_shop())
+    load_info = pipeline.run(SOURCES[source_name]())
     print(load_info)
 
 
 if __name__ == "__main__":
-    run()
+    if len(sys.argv) != 2 or sys.argv[1] not in SOURCES:
+        sys.exit(f"usage: python dlt/pipeline.py {{{'|'.join(SOURCES)}}}")
+    run(sys.argv[1])

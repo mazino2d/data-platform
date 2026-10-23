@@ -1,0 +1,12 @@
+name: jaffle_shop_snapshots
+description: "Run SCD Type 2 snapshots for customers, orders, and products."
+dbt_command: snapshot
+dbt_selector: "tag:jaffle_shop,resource_type:snapshot"
+
+trigger:
+  type: upstream
+  depends_on: jaffle_shop_raw_ingestion
+
+retry:
+  max_retries: 2
+  retry_delay_minutes: 5

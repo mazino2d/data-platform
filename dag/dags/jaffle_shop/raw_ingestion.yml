@@ -1,0 +1,11 @@
+name: jaffle_shop_raw_ingestion
+description: "Ingest the Jaffle Shop backend (Faker) into BigQuery via dlt."
+command: "python dlt/pipeline.py jaffle_shop"
+
+trigger:
+  type: cron
+  cron_schedule: "0 6 * * *"
+
+retry:
+  max_retries: 3
+  retry_delay_minutes: 5

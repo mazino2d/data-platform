@@ -1,6 +1,6 @@
 # Data Engineering: Principles & Patterns
 
-A series on the foundational ideas behind modern data pipelines — how to think about them, design them, and operate them reliably. Each post focuses on a principle rather than a tool. Code examples are drawn from the [jaffle-shop](https://github.com/mazino2d/jaffle-shop) reference implementation.
+A series on the foundational ideas behind modern data pipelines — how to think about them, design them, and operate them reliably. Each post focuses on a principle rather than a tool. Code examples are drawn from the [data-platform](https://github.com/mazino2d/data-platform) repository, starting from its Jaffle Shop demo.
 
 ---
 
@@ -102,4 +102,4 @@ Delivering data to the consumers who depend on it.
 
 ---
 
-*All examples reference the [jaffle-shop](https://github.com/mazino2d/jaffle-shop) repository — a complete demo pipeline built with dlt, dbt, DuckDB, and Dagster.*
+*All examples reference the [data-platform](https://github.com/mazino2d/data-platform) repository — its Jaffle Shop demo pipeline was built with dlt, dbt, DuckDB and Dagster, and now runs on BigQuery with GitHub Actions.*

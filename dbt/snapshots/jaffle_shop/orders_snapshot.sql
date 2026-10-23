@@ -15,9 +15,9 @@
         customer_id,
         status,
         amount,
-        placed_at::TIMESTAMP AS placed_at,
-        updated_at::TIMESTAMP AS updated_at
-    FROM {{ source("raw", "orders") }}
+        CAST(placed_at AS TIMESTAMP) AS placed_at,
+        CAST(updated_at AS TIMESTAMP) AS updated_at
+    FROM {{ source("jaffle_shop", "orders") }}
     {{ snapshot_incremental_filter(this) }}
 
 {% endsnapshot %}

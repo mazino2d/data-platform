@@ -1,7 +1,13 @@
-.PHONY: ingest snapshot build build-prod freshness docs blog dagster lint fix pipeline sync install
+.PHONY: ingest snapshot build build-prod freshness docs blog dags lint fix pipeline sync install
+
+SOURCE ?= jaffle_shop
+
+# dlt reads .env itself; export it so dbt (env_var, DBT_TARGET) sees the same values.
+-include .env
+export
 
 ingest:
-	python dlt/pipeline.py
+	python dlt/pipeline.py $(SOURCE)
 
 snapshot:
 	cd dbt && dbt snapshot --profiles-dir .
@@ -22,8 +28,8 @@ blog:
 	mkdir -p .mkdocs && curl -sSfL -o .mkdocs/base.yml https://raw.githubusercontent.com/mazino2d/github-workflows/v1/mkdocs/base.yml
 	mkdocs serve
 
-dagster:
-	dagster dev -f dag/definitions.py --log-level warning
+dags:
+	python -m dag.render
 
 lint:
 	sqlfluff lint dbt/models

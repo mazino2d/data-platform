@@ -15,7 +15,7 @@
 
   Output CTEs (SELECT from _sk_final in your model):
     _sk_base     — snapshot rows normalised: sk, source_id, valid_from, valid_to,
-                   is_current, plus all other columns via * EXCLUDE (dbt internal cols)
+                   is_current, plus all other columns via * EXCEPT (dbt internal cols)
     _sk_resolved — adds canonical_id (= old_id when migrated, else source_id)
     _sk_final    — adds master_sk:
                      incremental run  → map lookup O(1) via sk_map_ref
@@ -41,7 +41,7 @@ _sk_base AS (
         dbt_valid_from              AS valid_from,
         dbt_valid_to                AS valid_to,
         dbt_valid_to IS NULL        AS is_current,
-        * EXCLUDE (dbt_scd_id, dbt_updated_at, dbt_valid_from, dbt_valid_to, {{ id_col }})
+        * EXCEPT (dbt_scd_id, dbt_updated_at, dbt_valid_from, dbt_valid_to, {{ id_col }})
     FROM {{ snapshot_ref }}
     {% if is_incremental() %}
     -- New versions, plus prior versions the snapshot just closed (dbt_valid_to set).

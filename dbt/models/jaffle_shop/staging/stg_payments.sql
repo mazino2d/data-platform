@@ -4,7 +4,7 @@
 -- order_master_sk: Stable order entity key — use for GROUP BY in int_order_payments.
 WITH
 _raw AS (
-    SELECT * FROM {{ source("raw", "payments") }}
+    SELECT * FROM {{ source("jaffle_shop", "payments") }}
 ),
 
 {{ fk_sk_enrich(
@@ -22,5 +22,5 @@ SELECT
     method AS payment_method,
     status AS payment_status,
     amount,
-    created_at::TIMESTAMP AS created_at
+    created_at
 FROM _enriched

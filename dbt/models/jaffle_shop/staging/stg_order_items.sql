@@ -5,7 +5,7 @@
 --                                 Captures the exact product state (price, name) at purchase.
 WITH
 _raw AS (
-    SELECT * FROM {{ source("raw", "order_items") }}
+    SELECT * FROM {{ source("jaffle_shop", "order_items") }}
 ),
 
 {{ fk_sk_enrich(
@@ -32,6 +32,6 @@ SELECT
     product_master_sk,
     quantity,
     unit_price,
-    created_at::TIMESTAMP AS created_at,
+    created_at,
     (quantity * unit_price) AS line_total
 FROM _enriched

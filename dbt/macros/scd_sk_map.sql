@@ -41,11 +41,13 @@ _resolved AS (
 ),
 
 _first_version AS (
-    -- DISTINCT ON keeps the row with the earliest valid_from per canonical_id,
-    -- which is the version whose sk becomes the permanent master_sk.
-    SELECT DISTINCT ON (canonical_id) canonical_id, sk AS master_sk
+    -- Keeps the row with the earliest valid_from per canonical_id, which is the
+    -- version whose sk becomes the permanent master_sk. BigQuery needs a WHERE
+    -- clause next to QUALIFY.
+    SELECT canonical_id, sk AS master_sk
     FROM _resolved
-    ORDER BY canonical_id, valid_from ASC
+    WHERE TRUE
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY canonical_id ORDER BY valid_from ASC) = 1
 )
 
 SELECT canonical_id, master_sk

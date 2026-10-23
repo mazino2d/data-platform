@@ -1,0 +1,12 @@
+name: jaffle_shop_features
+description: "ML feature tables: RFM, AOV, return_rate."
+dbt_command: build
+dbt_selector: "tag:jaffle_shop,tag:features"
+
+trigger:
+  type: upstream
+  depends_on: jaffle_shop_core
+
+retry:
+  max_retries: 1
+  retry_delay_minutes: 10

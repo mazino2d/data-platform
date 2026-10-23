@@ -35,11 +35,12 @@ jobs:
       generator: mkdocs
       python-version: "3.11"
       install: pip install -e ".[dev]"
+      # Docs from the parsed manifest only: no compile and no catalog, so no
+      # BigQuery connection or credentials, and no table stats on the public site.
       pre-build: |
-        python dlt/pipeline.py
         cd dbt
         dbt deps --profiles-dir .
-        dbt docs generate --profiles-dir .
+        dbt docs generate --profiles-dir . --target prod --no-compile --empty-catalog
       post-build: cp -r dbt/target _site/dbt-docs
       paths: |
         dbt/**

@@ -26,7 +26,7 @@
 
   Usage (single enrichment):
     WITH
-    _raw AS (SELECT * FROM {{ source("raw", "payments") }}),
+    _raw AS (SELECT * FROM {{ source("jaffle_shop", "payments") }}),
     {{ fk_sk_enrich('_raw', 'order_id', 'created_at',
                     ref('stg_orders'), 'order_id', 'order',
                     sk_map_ref=ref('dim_order_sk_map'),
@@ -36,7 +36,7 @@
 
   Usage (chained — two FK enrichments):
     WITH
-    _raw AS (SELECT * FROM {{ source("raw", "order_items") }}),
+    _raw AS (SELECT * FROM {{ source("jaffle_shop", "order_items") }}),
     {{ fk_sk_enrich('_raw', 'order_id', 'created_at',
                     ref('stg_orders'), 'order_id', 'order',
                     sk_map_ref=ref('dim_order_sk_map'), output_cte='_with_order') }},

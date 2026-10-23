@@ -10,7 +10,6 @@
         "**/*.egg-info": true,
         "build": true,
         "dist": true,
-        ".tmp_dagster*":true,
         "site": true,
         ".cache": true,
     },

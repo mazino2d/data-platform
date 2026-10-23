@@ -3,7 +3,7 @@ INHERIT: .mkdocs/base.yml
 
 site_name: Data Engineering Blog
 site_description: Principles and patterns in data engineering, demonstrated with a real pipeline.
-site_url: https://mazino2d.github.io/jaffle-shop/
+site_url: https://mazino2d.github.io/data-platform/
 site_author: mazino2d
 copyright: Copyright &copy; 2025 mazino2d
 
@@ -27,7 +27,7 @@ extra_javascript:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/mazino2d/jaffle-shop
+      link: https://github.com/mazino2d/data-platform
 
 nav:
   - Home: index.md

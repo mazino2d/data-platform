@@ -1,4 +1,4 @@
-# CLAUDE.md — Jaffle Shop
+# CLAUDE.md — data-platform
 
 ## Language
 
@@ -8,73 +8,89 @@
 
 ## Repo Architecture
 
-This is a demo end-to-end data pipeline using a fictional e-commerce store (Jaffle Shop).
+The data pipeline for all mazino2d projects: one BigQuery warehouse, dbt models per project,
+YAML DAG configs rendered into GitHub Actions workflows. Projects so far: `jaffle_shop`
+(Faker demo).
 
 ### Stack
 
 | Layer | Tool | Entry point |
 |---|---|---|
-| Ingestion | dlt | `dlt/pipeline.py`, `dlt/sources/jaffle_shop.py` |
-| Warehouse | DuckDB | `jaffle_shop_dev.duckdb` (local, gitignored) |
-| Transformation | dbt | `dbt/` |
-| Orchestration | Dagster | `dag/definitions.py` |
+| Ingestion | dlt | `dlt/pipeline.py <source>`, `dlt/sources/<source>.py` |
+| Warehouse | BigQuery | project `dataplatform-as-se1-prd`, location `asia-southeast1` |
+| Transformation | dbt (dbt-bigquery) | `dbt/` |
+| Orchestration | YAML DAGs → GitHub Actions | `dag/dags/`, `dag/render.py` |
 
-### dbt model layers
+Infrastructure (GCP project, Workload Identity Federation, the `GCP_PROJECT_ID`,
+`GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` repo variables) lives in
+everything-as-code, `terraform/gcp/dataplatform-as-se1-prd` and `terraform/github`.
+
+### Datasets
+
+`dbt/macros/generate_schema_name.sql` maps each model's `+schema` (`<project>_<layer>`) to a dataset:
+
+- `prod` → `<project>_<layer>` (only the scheduled DAG workflows use prod)
+- `ci` → `$DBT_CI_DATASET_<project>_<layer>`, dropped by `scripts/drop_datasets.py` after the run
+- `dev` → `dev_$USER_<project>_<layer>`
+
+dlt writes raw data to `<source>_raw` with the same prefixes; the project's `_sources.yml`
+computes the same name.
+
+### dbt layout
 
 ```
-dbt/seeds/              Static reference data (e.g. customer_id_mapping.csv)
-dbt/snapshots/          SCD Type 2 snapshots for customers, orders, products
-dbt/macros/             Surrogate key enrichment macros (scd_surrogate_keys, scd_sk_map,
-                        fk_sk_enrich, snapshot_incremental_filter)
-dbt/models/
-  staging/              1:1 clean views from raw schema + seeds. Incremental for log tables.
-  intermediate/         Business logic joins (int_customer_orders, int_order_payments)
-                        + surrogate key lookup tables (dim_*_sk_map).
-  marts/core/           Reporting tables: dim_customers, fct_orders
-  marts/features/       ML feature tables: customer_features, order_features
+dbt/macros/             generate_schema_name + surrogate key macros (scd_surrogate_keys,
+                        scd_sk_map, fk_sk_enrich, snapshot_incremental_filter)
+dbt/seeds/<project>/
+dbt/snapshots/<project>/
+dbt/models/<project>/
+  staging/              1:1 clean views from raw + seeds. Incremental for log tables.
+  intermediate/         Business logic joins + surrogate key lookup tables (dim_*_sk_map).
+  marts/core/           Reporting tables
+  marts/features/       ML feature tables
 ```
 
-### Source table types
+### Jaffle Shop source table types
 
 | Type | Tables | Backend behavior | dbt strategy |
 |---|---|---|---|
 | SCD (slowly changing) | customers, orders, products | Updated in-place | `dbt snapshot` → SCD Type 2 |
 | Log (append-only) | payments, order_items | New row per event | `incremental` model |
 
-### Dagster layout
+### DAG layout
 
 ```
 dag/
-  dags/        YAML configs (one per job) — edit here to change schedules/sensors
-  assets/      Dagster asset definitions (ingestion.py wraps dlt)
-  loader.py    Reads YAML dags → creates Dagster jobs + schedules at startup
-  definitions.py  Dagster entry point
+  dags/<project>/*.yml  One YAML per task: command or dbt_command + dbt_selector,
+                        trigger (cron | upstream), retry
+  config.py             Loads/validates the YAML, groups tasks into pipelines
+  run.py                python -m dag.run <task> — runs one task with retries
+  render.py             python -m dag.render — writes .github/workflows/dag-<root>.yml
 ```
 
-Deployment: self-hosted Dagster OSS on the `mazino2d-as-se1-dev` GKE cluster (repo `everything-as-code`,
-`kubernetes/clusters/mazino2d-as-se1-dev/apps/dagster/`). The root `Dockerfile` builds the code location image
-(`dagster api grpc -m dag`), pushed to `ghcr.io/mazino2d/jaffle-shop` by `.github/workflows/docker-image.yml`.
-Keep `dagster*` pins in `pyproject.toml` in lockstep with the Dagster Helm chart version.
-
-Adding or reconfiguring a job: edit/add a YAML file in `dag/dags/` — no Python changes needed.
+The YAML is orchestrator-neutral; GitHub Actions is the current target. After editing
+`dag/dags/`, run `make dags` and commit the generated workflows — CI fails on drift
+(`python -m dag.render --check`). Never edit `dag-<root>.yml` by hand.
 
 ### Common commands
 
 ```bash
 make install      # install all Python dependencies
-make ingest       # run dlt pipeline (raw schema)
+make ingest       # run a dlt pipeline (SOURCE=jaffle_shop)
 make snapshot     # run dbt snapshots (SCD Type 2)
-make build        # dbt build + tests (dev)
-make build-prod   # dbt build + tests (prod)
+make build        # dbt build + tests (dev datasets)
+make build-prod   # dbt build + tests (prod datasets) — normally only the DAG workflows do this
 make pipeline     # ingest → snapshot → build in sequence
 make freshness    # check source SLA (warn >12h, error >24h)
 make docs         # generate + serve dbt lineage graph
-make dagster      # start Dagster UI at http://localhost:3000
+make dags         # render dag/dags/ into GitHub Actions workflows
 make blog         # serve MkDocs documentation site
 make lint         # SQLFluff lint all SQL models
 make fix          # SQLFluff auto-fix SQL style
 make sync         # compile requirements.txt from pyproject.toml
 ```
+
+Local runs need `gcloud auth application-default login`.
 
 ---
 
@@ -84,8 +100,9 @@ make sync         # compile requirements.txt from pyproject.toml
 
 Config: `.sqlfluff` (root of repo).
 
-- Dialect: **DuckDB**
-- Templater: **dbt**
+- Dialect: **BigQuery** — use `CAST(x AS TIMESTAMP)` (no `::`), `* EXCEPT (...)`,
+  `TIMESTAMP_DIFF`, `QUALIFY` (with a `WHERE` clause)
+- Templater: **jinja** with dbt builtins (no warehouse connection); only `dbt/models/` is linted
 - Max line length: **120**
 - Keywords: **UPPERCASE** (`SELECT`, `FROM`, `WHERE`, `JOIN`, `AND`, `OR`, `CASE`, `WHEN`, `THEN`, `END`, `AS`, …)
 - Identifiers: **lowercase** (column names, aliases, CTE names)
@@ -102,7 +119,7 @@ The following hooks run automatically on `git commit`:
 - `end-of-file-fixer` — files must end with a newline
 - `check-yaml` — valid YAML syntax
 - `check-merge-conflict` — no unresolved conflict markers
-- `sqlfluff-lint` — SQL style check (DuckDB dialect)
+- `sqlfluff-lint` — SQL style check (BigQuery dialect, `dbt/models/` only)
 
 Never skip hooks with `--no-verify`. Fix the underlying issue instead.
 
@@ -114,36 +131,45 @@ Never skip hooks with `--no-verify`. Fix the underlying issue instead.
 
 ### dbt conventions
 
-- New staging models go in `dbt/models/staging/` and must be registered in `_sources.yml` or `_schema.yml`
-- New intermediate models go in `dbt/models/intermediate/`
+- A new project gets its own folders under `models/`, `snapshots/` and `seeds/`, a project tag,
+  and `+schema: <project>_<layer>` per layer in `dbt_project.yml`
+- New staging models go in `dbt/models/<project>/staging/` and must be registered in `_sources.yml` or `_schema.yml`
+- New intermediate models go in `dbt/models/<project>/intermediate/`
 - SCD source tables use `dbt snapshot` — do not query the raw table directly for history; use the snapshot
 - Log tables (`payments`, `order_items`) use `incremental` materialization — always include an incremental filter using the `snapshot_incremental_filter` macro
 - Use the `fk_sk_enrich` macro to join surrogate keys onto fact tables; do not hardcode joins to snapshot tables
-- New seeds go in `dbt/seeds/` with a matching schema entry
+- New seeds go in `dbt/seeds/<project>/` with a matching schema entry
 
-### Dagster conventions
+### DAG conventions
 
-- New jobs are defined as YAML files in `dag/dags/` — `loader.py` picks them up automatically
-- Do not hardcode job definitions in Python unless they require logic that YAML cannot express
-- Assets live in `dag/assets/`
+- New tasks are YAML files in `dag/dags/<project>/`, named `<project>_<task>`
+- dbt tasks select on the project tag plus the layer tag
+- Do not add orchestrator-specific fields; extend `dag/config.py` and every renderer instead
+
+### Data privacy
+
+The repo is public. Never commit credentials, `.env`, `gha-creds-*.json`, extracted data or
+dashboard data files. Personal data from app projects (names, emails, amounts) stays in
+BigQuery; models that feed public outputs (dbt docs) must not expose it.
 
 ---
 
 ## Git & Pull Requests
 
-- Never commit directly to `main` — branch as `<type>/<short-kebab-desc>` (e.g. `feat/dagster-k8s-image`)
+- Never commit directly to `main` — branch as `<type>/<short-kebab-desc>` (e.g. `feat/simsplit-events`)
 - Commit messages and PR titles follow Conventional Commits: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `ci:`
 - PRs are squash-merged, so the PR title becomes the commit on `main`
 - To open a PR, use the `write-pr` skill (`.claude/skills/write-pr/SKILL.md`)
 
 ### CI workflows (`.github/workflows/`)
 
-Each workflow is a thin caller of a reusable workflow in [mazino2d/github-workflows](https://github.com/mazino2d/github-workflows) (`@v1`); the logic lives there.
+Workflows are thin callers of reusable workflows in [mazino2d/github-workflows](https://github.com/mazino2d/github-workflows) (`@v1`), except the ones that need `id-token: write` for BigQuery, which are local.
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `ci.yml` | PR + push `main` (dbt/dlt changes) | pre-commit lint, dlt ingest + `dbt build` on local DuckDB; actionlint + CodeQL on workflows |
-| `docker.yml` | PR + push `main` (dag/dbt/dlt/Dockerfile changes) | build image, `dagster definitions validate`; push to GHCR on `main` and open the dev bump PR in everything-as-code |
-| `docs.yml` | PR (build only) + push `main` | build MkDocs + dbt docs, deploy to GitHub Pages |
+| `ci.yml` | PR + push `main` | `lint`: pre-commit + `dag.render --check`; `dbt` (local): dlt ingest + `dbt build` into `ci_<run>_*` datasets, then drops them; actionlint + CodeQL |
+| `docs.yml` | PR (build only) + push `main` | build MkDocs + dbt docs (`--no-compile --empty-catalog`: lineage and YAML docs only, no BigQuery access), deploy to GitHub Pages |
+| `dag-task.yml` | called by `dag-*.yml` | run one DAG task against prod |
+| `dag-*.yml` | cron + manual (generated) | one pipeline per cron task |
 
 `mkdocs.yml` inherits the shared theme from `.mkdocs/base.yml` (fetched by the workflow, and by `make blog` locally).
