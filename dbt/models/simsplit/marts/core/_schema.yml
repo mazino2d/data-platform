@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: dim_user
+    description: >
+      One row per existing account: name, email and the privacy policy agreement. Rebuilt daily
+      from a replaced load, so deleted accounts disappear; facts keep only their uid.
+    columns:
+      - name: uid
+        tests: [unique, not_null]
+  - name: dim_group
+    description: "One row per group with its accounts, members and expense totals."
+    columns:
+      - name: group_id
+        tests: [unique, not_null]
+  - name: fct_expenses
+    description: "One row per expense (current state); payer_uid when the paying member is claimed."
+    columns:
+      - name: expense_id
+        tests: [unique, not_null]
+  - name: fct_settlements
+    columns:
+      - name: settlement_id
+        tests: [unique, not_null]
+  - name: fct_usage_events
+    description: "Every tracked action of signed-in accounts, kept indefinitely."
+    columns:
+      - name: uid
+        tests: [not_null]
+  - name: fct_error_reports
+    description: "Anonymous error reports with their breadcrumbs, kept indefinitely."
+    columns:
+      - name: report_id
+        tests: [not_null]

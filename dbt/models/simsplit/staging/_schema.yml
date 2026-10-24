@@ -1,0 +1,55 @@
+version: 2
+
+models:
+  - name: stg_users
+    description: "One row per account with the privacy policy revision it agreed to by signing in."
+    columns:
+      - name: uid
+        tests: [unique, not_null]
+  - name: stg_groups
+    columns:
+      - name: group_id
+        tests: [unique, not_null]
+  - name: stg_group_accounts
+    description: "Which accounts belong to which group."
+    columns:
+      - name: uid
+        tests: [not_null]
+  - name: stg_members
+    columns:
+      - name: member_id
+        tests: [unique, not_null]
+  - name: stg_expenses
+    columns:
+      - name: expense_id
+        tests: [unique, not_null]
+      - name: amount_cents
+        tests: [not_null]
+  - name: stg_expense_splits
+    columns:
+      - name: expense_id
+        tests: [not_null]
+  - name: stg_settlements
+    columns:
+      - name: settlement_id
+        tests: [unique, not_null]
+  - name: stg_activity
+    columns:
+      - name: activity_id
+        tests: [not_null]
+  - name: stg_usage_events
+    columns:
+      - name: event_kind
+        tests:
+          - accepted_values:
+              values: ["screen", "tap", "form", "dialog", "gesture", "op"]
+      - name: platform
+        tests:
+          - accepted_values:
+              values: ["android", "ios", "web"]
+  - name: stg_error_reports
+    columns:
+      - name: platform
+        tests:
+          - accepted_values:
+              values: ["android", "ios", "web"]

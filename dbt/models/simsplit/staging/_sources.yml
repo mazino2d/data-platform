@@ -1,0 +1,49 @@
+version: 2
+
+sources:
+  - name: simsplit
+    description: "sim-split's Firestore data, copied daily by dlt (dlt/pipeline.py simsplit)."
+    # Same dataset the pipeline writes to: simsplit_raw on prod, <target>_simsplit_raw elsewhere.
+    schema: "{{ 'simsplit_raw' if target.name == 'prod' else target.schema ~ '_simsplit_raw' }}"
+    tables:
+      - name: users
+        description: "One row per account with the privacy policy agreement; replaced on every load."
+        columns:
+          - name: path
+            tests: [unique, not_null]
+      - name: groups
+        loaded_at_field: updated_at
+        columns:
+          - name: path
+            tests: [unique, not_null]
+      - name: members
+        columns:
+          - name: path
+            tests: [unique, not_null]
+      - name: expenses
+        columns:
+          - name: path
+            tests: [unique, not_null]
+      - name: settlements
+        columns:
+          - name: path
+            tests: [unique, not_null]
+      - name: activity
+        columns:
+          - name: path
+            tests: [unique, not_null]
+
+  - name: simsplit_telemetry
+    description: >
+      Error reports and usage events written by sim-split's telemetry endpoint (Cloud Run,
+      BigQuery Storage Write API). Only prod has them, so every target reads simsplit_raw.
+    schema: simsplit_raw
+    tables:
+      - name: error_reports
+        columns:
+          - name: report_id
+            tests: [not_null]
+      - name: usage_events
+        columns:
+          - name: uid
+            tests: [not_null]

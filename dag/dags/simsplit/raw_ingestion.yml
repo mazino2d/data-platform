@@ -1,0 +1,11 @@
+name: simsplit_raw_ingestion
+description: "Copy sim-split's Firestore data (users, groups, members, expenses, settlements, activity) into BigQuery via dlt."
+command: "python dlt/pipeline.py simsplit"
+
+trigger:
+  type: cron
+  cron_schedule: "0 5 * * *"
+
+retry:
+  max_retries: 3
+  retry_delay_minutes: 5

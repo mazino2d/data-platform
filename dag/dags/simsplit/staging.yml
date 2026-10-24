@@ -1,0 +1,12 @@
+name: simsplit_staging
+description: "Clean the Firestore copy and the telemetry tables into staging views."
+dbt_command: build
+dbt_selector: "tag:simsplit,tag:staging"
+
+trigger:
+  type: upstream
+  depends_on: simsplit_raw_ingestion
+
+retry:
+  max_retries: 2
+  retry_delay_minutes: 5
