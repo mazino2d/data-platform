@@ -88,7 +88,9 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
       - name: Ingest
-        run: python dlt/pipeline.py jaffle_shop
+        run: |
+          python dlt/pipeline.py jaffle_shop
+          python dlt/pipeline.py simsplit
       - name: dbt build
         run: |
           cd dbt

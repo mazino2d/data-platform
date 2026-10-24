@@ -1,0 +1,12 @@
+name: simsplit_core
+description: "Users, groups, expenses, settlements, usage events and error reports for analysis."
+dbt_command: build
+dbt_selector: "tag:simsplit,tag:core"
+
+trigger:
+  type: upstream
+  depends_on: simsplit_staging
+
+retry:
+  max_retries: 1
+  retry_delay_minutes: 10

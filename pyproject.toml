@@ -9,6 +9,7 @@ description = "Data platform for mazino2d projects: dlt + BigQuery + dbt, orches
 requires-python = ">=3.11"
 dependencies = [
     "dlt[bigquery,parquet]>=1.4",
+    "google-cloud-firestore>=2.19",
     "dbt-core>=1.10,<1.11",
     "dbt-bigquery>=1.10,<1.11",
     "faker>=24",

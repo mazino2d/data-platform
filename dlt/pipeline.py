@@ -3,6 +3,7 @@ Entry point for running a dlt ingestion pipeline.
 
 Usage:
     python dlt/pipeline.py <source>        e.g. python dlt/pipeline.py jaffle_shop
+    sources: jaffle_shop (Faker demo), simsplit (sim-split's Firestore)
 
 Loads the source into BigQuery, in the dataset dbt reads it from (see
 dbt/macros/generate_schema_name.sql):
@@ -27,11 +28,13 @@ import dlt
 from dotenv import load_dotenv
 
 from sources.jaffle_shop import jaffle_shop
+from sources.simsplit import simsplit
 
 load_dotenv()
 
 SOURCES = {
     "jaffle_shop": jaffle_shop,
+    "simsplit": simsplit,
 }
 
 LOCATION = "asia-southeast1"

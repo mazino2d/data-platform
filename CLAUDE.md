@@ -10,7 +10,8 @@
 
 The data pipeline for all mazino2d projects: one BigQuery warehouse, dbt models per project,
 YAML DAG configs rendered into GitHub Actions workflows. Projects so far: `jaffle_shop`
-(Faker demo).
+(Faker demo) and `simsplit` (the sim-split app: a daily dlt copy of its Firestore, plus the
+error reports and usage events its telemetry endpoint writes to `simsplit_raw`).
 
 ### Stack
 
@@ -34,7 +35,13 @@ everything-as-code, `terraform/gcp/dataplatform-as-se1-prd` and `terraform/githu
 - `dev` → `dev_$USER_<project>_<layer>`
 
 dlt writes raw data to `<source>_raw` with the same prefixes; the project's `_sources.yml`
-computes the same name.
+computes the same name. Exception: sim-split's `error_reports` and `usage_events` are written
+by its telemetry endpoint to prod `simsplit_raw` only, so the `simsplit_telemetry` source reads
+`simsplit_raw` from every target.
+
+sim-split data is personal (names, emails, amounts): `dim_user` is rebuilt from a replaced
+`users` load and never snapshotted, so a deleted account leaves the warehouse with the next
+daily run, while facts keep only its uid.
 
 ### dbt layout
 

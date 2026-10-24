@@ -38,6 +38,20 @@ models:
           +materialized: table
           +tags: ["features"]
 
+    # sim-split (R-4): the Firestore copy from dlt plus the telemetry endpoint's
+    # error reports and usage events. Personal data: never in public outputs.
+    simsplit:
+      +tags: ["simsplit"]
+      staging:
+        +schema: simsplit_staging
+        +materialized: view
+        +tags: ["staging"]
+      marts:
+        core:
+          +schema: simsplit_marts
+          +materialized: table
+          +tags: ["core"]
+
 snapshots:
   data_platform:
     jaffle_shop:
