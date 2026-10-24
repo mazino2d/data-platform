@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "sources": "evidence sources",
-    "build": "evidence build",
-    "build:strict": "evidence build:strict",
+    "build": "evidence build && node scripts/duckdb-from-cdn.mjs",
+    "build:strict": "evidence build:strict && node scripts/duckdb-from-cdn.mjs",
     "dev": "evidence dev"
   },
   "engines": {
