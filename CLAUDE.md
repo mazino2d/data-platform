@@ -21,6 +21,7 @@ error reports and usage events its telemetry endpoint writes to `simsplit_raw`).
 | Warehouse | BigQuery | project `dataplatform-as-se1-prd`, location `asia-southeast1` |
 | Transformation | dbt (dbt-bigquery) | `dbt/` |
 | Orchestration | YAML DAGs → GitHub Actions | `dag/dags/`, `dag/render.py` |
+| Dashboard | Evidence → Cloudflare Pages (behind Access) | `evidence/` |
 
 Infrastructure (GCP project, Workload Identity Federation, the `GCP_PROJECT_ID`,
 `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` repo variables) lives in
@@ -157,7 +158,9 @@ Never skip hooks with `--no-verify`. Fix the underlying issue instead.
 
 The repo is public. Never commit credentials, `.env`, `gha-creds-*.json`, extracted data or
 dashboard data files. Personal data from app projects (names, emails, amounts) stays in
-BigQuery; models that feed public outputs (dbt docs) must not expose it.
+BigQuery; models that feed public outputs (dbt docs) must not expose it. The Evidence
+dashboard reads only aggregate models (`<project>_metrics`, no uid, name or email) and is
+deployed only to its Access-protected Cloudflare Pages project.
 
 ---
 
@@ -178,5 +181,6 @@ Workflows are thin callers of reusable workflows in [mazino2d/github-workflows](
 | `docs.yml` | PR (build only) + push `main` | build MkDocs + dbt docs (`--no-compile --empty-catalog`: lineage and YAML docs only, no BigQuery access), deploy to GitHub Pages |
 | `dag-task.yml` | called by `dag-*.yml` | run one DAG task against prod |
 | `dag-*.yml` | cron + manual (generated) | one pipeline per cron task |
+| `dashboard.yml` | after `DAG simsplit_raw_ingestion` + manual | build the Evidence dashboard from `simsplit_metrics` and deploy it to Cloudflare Pages behind Access |
 
 `mkdocs.yml` inherits the shared theme from `.mkdocs/base.yml` (fetched by the workflow, and by `make blog` locally).
