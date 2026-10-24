@@ -10,10 +10,11 @@ after the data-platform pipeline. Counts only: no account, name or email is on t
 ```sql active_users
 select day, daily_active_users, weekly_active_users, monthly_active_users
 from warehouse.active_users
+where day is not null
 order by day
 ```
 
-<LineChart
+<LineChart emptySet="pass" emptyMessage="No data yet"
     data={active_users}
     x=day
     y={['daily_active_users', 'weekly_active_users', 'monthly_active_users']}
@@ -25,51 +26,52 @@ order by day
 ```sql sessions
 select day, platform, sessions, median_session_seconds, events_per_session
 from warehouse.sessions
+where day is not null
 order by day
 ```
 
-<BarChart data={sessions} x=day y=sessions series=platform yAxisTitle="sessions" />
+<BarChart emptySet="pass" emptyMessage="No data yet" data={sessions} x=day y=sessions series=platform yAxisTitle="sessions" />
 
-<LineChart data={sessions} x=day y=median_session_seconds series=platform yAxisTitle="median session (s)" />
+<LineChart emptySet="pass" emptyMessage="No data yet" data={sessions} x=day y=median_session_seconds series=platform yAxisTitle="median session (s)" />
 
 ## Activation funnel
 
 ```sql funnel
-select 'Signed up' as step, 1 as step_order, sum(signed_up) as accounts from warehouse.funnel
+select 'Signed up' as step, 1 as step_order, coalesce(sum(signed_up), 0) as accounts from warehouse.funnel
 union all
-select 'In a group', 2, sum(in_a_group) from warehouse.funnel
+select 'In a group', 2, coalesce(sum(in_a_group), 0) from warehouse.funnel
 union all
-select 'Logged an expense', 3, sum(logged_an_expense) from warehouse.funnel
+select 'Logged an expense', 3, coalesce(sum(logged_an_expense), 0) from warehouse.funnel
 union all
-select 'Friend joined', 4, sum(friend_joined) from warehouse.funnel
+select 'Friend joined', 4, coalesce(sum(friend_joined), 0) from warehouse.funnel
 order by step_order
 ```
 
-<FunnelChart data={funnel} nameCol=step valueCol=accounts />
+<FunnelChart emptySet="pass" emptyMessage="No data yet" data={funnel} nameCol=step valueCol=accounts />
 
 ```sql funnel_by_week
-select * from warehouse.funnel order by signup_week desc
+select * from warehouse.funnel where signup_week is not null order by signup_week desc
 ```
 
-<DataTable data={funnel_by_week} />
+<DataTable emptySet="pass" emptyMessage="No data yet" data={funnel_by_week} />
 
 ## Groups, expenses and settlements created
 
 ```sql weekly_activity
-select week_start, entity, created from warehouse.weekly_activity order by week_start
+select week_start, entity, created from warehouse.weekly_activity where week_start is not null order by week_start
 ```
 
-<BarChart data={weekly_activity} x=week_start y=created series=entity />
+<BarChart emptySet="pass" emptyMessage="No data yet" data={weekly_activity} x=week_start y=created series=entity />
 
 ## Most used screens and actions (last 30 days)
 
 ```sql top_events
 select event_kind, event_name, sum(events) as events, max(users) as peak_daily_users
 from warehouse.events
-where day >= current_date - interval 30 day
+where day >= current_date - interval 30 day and event_name is not null
 group by event_kind, event_name
 order by events desc
 limit 50
 ```
 
-<DataTable data={top_events} rows=20 search=true />
+<DataTable emptySet="pass" emptyMessage="No data yet" data={top_events} rows=20 search=true />
