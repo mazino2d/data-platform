@@ -1,0 +1,12 @@
+name: simsplit_metrics
+description: "Aggregates for the Evidence dashboard (no uid, name or email)."
+dbt_command: build
+dbt_selector: "tag:simsplit,tag:metrics"
+
+trigger:
+  type: upstream
+  depends_on: simsplit_core
+
+retry:
+  max_retries: 1
+  retry_delay_minutes: 10

@@ -51,6 +51,12 @@ models:
           +schema: simsplit_marts
           +materialized: table
           +tags: ["core"]
+        # Aggregates only (no uid, name or email): the only models the
+        # Evidence dashboard reads.
+        metrics:
+          +schema: simsplit_metrics
+          +materialized: table
+          +tags: ["metrics"]
 
 snapshots:
   data_platform:

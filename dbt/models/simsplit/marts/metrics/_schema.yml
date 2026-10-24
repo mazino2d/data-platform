@@ -1,0 +1,24 @@
+version: 2
+
+# Aggregates only: no uid, name or email column may appear here, since the
+# Evidence dashboard reads these models and bakes their rows into its site.
+models:
+  - name: metrics_active_users
+    description: "Daily, weekly (7-day) and monthly (28-day) active accounts per day."
+    columns:
+      - name: day
+        tests: [unique, not_null]
+  - name: metrics_sessions
+    description: "Sessions per day and platform: count, median length, events per session."
+  - name: metrics_events
+    description: "Uses of each screen and action per day."
+  - name: metrics_operations
+    description: "Runs, failure rate and median duration of each operation per day."
+  - name: metrics_errors
+    description: "Errors per 100 sessions by day, platform and app version."
+  - name: metrics_top_errors
+    description: "Error types by frequency, with first and last seen."
+  - name: metrics_funnel
+    description: "Activation funnel per sign-up week, for existing accounts."
+  - name: metrics_weekly_activity
+    description: "Groups, expenses and settlements created per week."

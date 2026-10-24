@@ -1,0 +1,6 @@
+node_modules/
+build/
+.evidence/
+.svelte-kit/
+# Query results are data; they never go into the repository.
+sources/**/*.parquet

@@ -1,0 +1,9 @@
+# Application Default Credentials: google-github-actions/auth (Workload
+# Identity Federation) in the dashboard workflow, `gcloud auth
+# application-default login` locally.
+name: warehouse
+type: bigquery
+options:
+  project_id: dataplatform-as-se1-prd
+  location: asia-southeast1
+  authenticator: gcloud-cli

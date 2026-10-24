@@ -45,3 +45,14 @@ jobs:
     with:
       task: simsplit_core
       dbt: true
+
+  simsplit_metrics:
+    # Aggregates for the Evidence dashboard (no uid, name or email).
+    needs: simsplit_core
+    uses: ./.github/workflows/dag-task.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      task: simsplit_metrics
+      dbt: true

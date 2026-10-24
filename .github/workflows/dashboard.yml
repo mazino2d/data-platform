@@ -1,0 +1,58 @@
+name: Dashboard
+
+# Builds the Evidence dashboard (evidence/) from the simsplit_metrics models
+# and deploys it to Cloudflare Pages, behind Cloudflare Access (only the
+# maintainer can open it). Runs after the daily sim-split pipeline and on
+# demand. The built site holds query results, so it only ever goes to that
+# Pages project: never to GitHub Pages or a public artifact.
+on:
+  workflow_run:
+    workflows: ["DAG simsplit_raw_ingestion"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: dashboard
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # Skipped until everything-as-code has created the Pages project and token.
+    if: >-
+      vars.DASHBOARD_PROJECT != '' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: evidence
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: evidence/package-lock.json
+      - run: npm ci
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      - name: Query the metrics
+        run: npm run sources
+      - name: Build
+        run: npm run build
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ vars.DASHBOARD_PROJECT }}
+        run: npx --yes wrangler@4 pages deploy build --project-name "$PROJECT" --branch main --commit-dirty=true
