@@ -2,28 +2,73 @@ name: Dashboard
 
 # Builds the Evidence dashboard (evidence/) from the simsplit_metrics models
 # and deploys it to Cloudflare Pages, behind Cloudflare Access (only the
-# maintainer can open it). Runs after the daily sim-split pipeline and on
-# demand. The built site holds query results, so it only ever goes to that
-# Pages project: never to GitHub Pages or a public artifact.
+# maintainer can open it). The built site holds query results, so it only
+# ever goes to those Pages projects: never to GitHub Pages or a public artifact.
+# One build per environment, each in its GitHub Environment (project and Pages
+# project), after the daily sim-split pipeline ran it or on demand:
+#   - dev → dataplatform-as-se1-dev, evidence/ from the pipeline's commit,
+#     Pages project data-platform-dashboard-dev
+#   - prd → dataplatform-as-se1-prd, evidence/ from the latest vYYYY.M.D tag,
+#     Pages project data-platform-dashboard
 on:
   workflow_run:
     workflows: ["DAG simsplit_raw_ingestion"]
     types: [completed]
   workflow_dispatch:
-
-concurrency:
-  group: dashboard
-  cancel-in-progress: false
+    inputs:
+      environment:
+        description: "dev or prd"
+        type: choice
+        options: [dev, prd]
+        default: dev
 
 permissions:
   contents: read
 
 jobs:
+  # The environments the pipeline run covered: a tag push runs prd only, a
+  # push to main dev only, the schedule both. A manual pipeline run is taken
+  # as both (its input isn't visible here).
+  plan:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      environments: ${{ steps.plan.outputs.environments }}
+      prd_ref: ${{ steps.plan.outputs.prd_ref }}
+    steps:
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT: ${{ inputs.environment }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          REPO: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          if [[ "$EVENT" == workflow_dispatch ]]; then
+            environments="[\"$INPUT\"]"
+          elif [[ "$RUN_EVENT" == push && "$RUN_BRANCH" == v* ]]; then
+            environments='["prd"]'
+          elif [[ "$RUN_EVENT" == push ]]; then
+            environments='["dev"]'
+          else
+            environments='["dev", "prd"]'
+          fi
+          prd_ref=$(git ls-remote --tags --refs "$REPO" | sed 's|.*refs/tags/||' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -t. -k1.2,1n -k2,2n -k3,3n | tail -1)
+          echo "environments=$environments" | tee -a "$GITHUB_OUTPUT"
+          echo "prd_ref=$prd_ref" | tee -a "$GITHUB_OUTPUT"
+
   deploy:
-    # Skipped until everything-as-code has created the Pages project and token.
-    if: >-
-      vars.DASHBOARD_PROJECT != '' &&
-      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON(needs.plan.outputs.environments) }}
+    environment: ${{ matrix.environment }}
+    concurrency:
+      group: dashboard-${{ matrix.environment }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -32,9 +77,32 @@ jobs:
     defaults:
       run:
         working-directory: evidence
+    env:
+      ENVIRONMENT: ${{ matrix.environment }}
+      REF: ${{ matrix.environment == 'prd' && needs.plan.outputs.prd_ref || github.event.workflow_run.head_sha || github.sha }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      PROJECT: ${{ vars.DASHBOARD_PROJECT }}
+      # Evidence reads source options from EVIDENCE_SOURCE__<source>__<option>,
+      # overriding sources/warehouse/connection.yaml.
+      EVIDENCE_SOURCE__warehouse__project_id: ${{ vars.GCP_PROJECT_ID }}
     steps:
+      # Skips until everything-as-code has set the environment's Pages project;
+      # without the environment's variables the repo-level ones (prd) apply.
+      - name: Check environment
+        working-directory: .
+        run: |
+          expected=data-platform-dashboard; [[ "$ENVIRONMENT" == dev ]] && expected=data-platform-dashboard-dev
+          if [[ "$GCP_PROJECT_ID" != "dataplatform-as-se1-$ENVIRONMENT" || "$PROJECT" != "$expected" ]]; then
+            echo "::error::$ENVIRONMENT must use dataplatform-as-se1-$ENVIRONMENT and $expected, not '$GCP_PROJECT_ID' and '$PROJECT'"
+            exit 1
+          fi
+          if [[ "$ENVIRONMENT" == prd && ! "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The prd dashboard builds only from a vYYYY.M.D release tag, not '$REF'"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
+          ref: ${{ env.REF }}
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
@@ -54,5 +122,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          PROJECT: ${{ vars.DASHBOARD_PROJECT }}
         run: npx --yes wrangler@4 pages deploy build --project-name "$PROJECT" --branch main --commit-dirty=true

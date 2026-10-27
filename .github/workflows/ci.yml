@@ -57,7 +57,9 @@ jobs:
 
   # Local rather than python-ci.yml: it needs id-token write for Workload
   # Identity Federation. Ingests and builds everything into throwaway ci_<run>_*
-  # datasets, then drops them. Runs only when the pipeline changed, and never for
+  # datasets in the dev project (the dev GitHub Environment), then drops them,
+  # so CI never touches prd. The Firestore copy comes from simsplit-as-se1-dev,
+  # topped up with fake data. Runs only when the pipeline changed, and never for
   # fork pull requests, which get no OIDC token (repo variables still reach them,
   # so the check is on the head repo, not on the variables).
   dbt:
@@ -67,6 +69,7 @@ jobs:
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    environment: dev
     permissions:
       contents: read
       id-token: write
@@ -74,7 +77,16 @@ jobs:
       DBT_TARGET: ci
       DBT_CI_DATASET: ci_${{ github.run_id }}_${{ github.run_attempt }}
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      SIMSPLIT_FIREBASE_PROJECT: ${{ vars.SIMSPLIT_FIREBASE_PROJECT }}
     steps:
+      # Without the dev environment's variables, the repo-level ones (prd) apply.
+      - name: Check environment
+        id: environment
+        run: |
+          if [[ "$GCP_PROJECT_ID" != dataplatform-as-se1-dev || "$SIMSPLIT_FIREBASE_PROJECT" != simsplit-as-se1-dev ]]; then
+            echo "::error::CI must use dataplatform-as-se1-dev and simsplit-as-se1-dev, not '$GCP_PROJECT_ID' and '$SIMSPLIT_FIREBASE_PROJECT'"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -91,13 +103,14 @@ jobs:
         run: |
           python dlt/pipeline.py jaffle_shop
           python dlt/pipeline.py simsplit
+          python dlt/pipeline.py simsplit_fake
       - name: dbt build
         run: |
           cd dbt
           dbt deps --profiles-dir .
           dbt build --profiles-dir . --target ci
       - name: Drop CI datasets
-        if: always()
+        if: always() && steps.environment.outcome == 'success'
         run: python scripts/drop_datasets.py "$DBT_CI_DATASET"
 
   workflows:

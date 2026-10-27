@@ -1,0 +1,12 @@
+name: simsplit_fake_ingestion
+description: "Add fake sim-split data (fake- IDs) to the dev warehouse, after the Firestore copy, so dashboards have data."
+command: "python dlt/pipeline.py simsplit_fake"
+environments: [dev]
+
+trigger:
+  type: upstream
+  depends_on: simsplit_raw_ingestion
+
+retry:
+  max_retries: 2
+  retry_delay_minutes: 5

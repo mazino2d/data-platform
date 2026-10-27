@@ -1,7 +1,16 @@
 """
 Renders the DAG configs into GitHub Actions workflows, one per cron-triggered
-pipeline: .github/workflows/dag-<root task>.yml. Each task is a job that calls
-the reusable dag-task.yml; upstream triggers become `needs`.
+pipeline: .github/workflows/dag-<root task>.yml. Each task is a job per
+environment that calls the reusable dag-task.yml; upstream triggers become
+`needs`. A `plan` job picks the environments and the code each one runs:
+
+    trigger                dev            prd
+    schedule               main           latest vYYYY.M.D tag
+    push to main           main           -
+    push of a v* tag       -              that tag
+    manual run             its ref        latest vYYYY.M.D tag (if chosen)
+
+So main is what dev runs, and only a release tag reaches prd.
 
 Usage:
     python -m dag.render           write the workflows
@@ -11,7 +20,7 @@ Usage:
 import sys
 from pathlib import Path
 
-from dag.config import load_tasks, pipelines
+from dag.config import ENVIRONMENTS, env_depends_on, load_tasks, pipelines
 
 WORKFLOWS_DIR = Path(__file__).parent.parent / ".github" / "workflows"
 PREFIX = "dag-"
@@ -23,7 +32,22 @@ name: DAG {root}
 on:
   schedule:
     - cron: "{cron}"
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - dag/**
+      - dbt/**
+      - dlt/**
+      - pyproject.toml
+      - .github/workflows/dag-*.yml
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "dev runs the chosen ref; prd runs the latest vYYYY.M.D tag"
+        type: choice
+        options: [dev, prd]
+        default: dev
 
 concurrency:
   group: dag-{root}
@@ -33,36 +57,98 @@ permissions:
   contents: read
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      dev: ${{{{ steps.plan.outputs.dev }}}}
+      prd: ${{{{ steps.plan.outputs.prd }}}}
+      prd_ref: ${{{{ steps.plan.outputs.prd_ref }}}}
+    steps:
+      - id: plan
+        shell: python
+        env:
+          EVENT: ${{{{ github.event_name }}}}
+          INPUT: ${{{{ inputs.environment }}}}
+          REPO: ${{{{ github.server_url }}}}/${{{{ github.repository }}}}
+        run: |
+"""
+
+# The plan step: which environments run, and the release tag prd runs.
+PLAN = r"""
+import os
+import re
+import subprocess
+
+event, ref, choice = os.environ["EVENT"], os.environ["GITHUB_REF"], os.environ["INPUT"]
+release = re.compile(r"^v\d+\.\d+\.\d+$")
+tag = ref.removeprefix("refs/tags/") if ref.startswith("refs/tags/") else None
+
+if event == "schedule":
+    dev, prd = True, True
+elif event == "push":
+    dev, prd = tag is None, tag is not None
+else:
+    dev, prd = choice == "dev", choice == "prd"
+
+prd_ref = ""
+if prd and tag and release.match(tag):
+    prd_ref = tag
+elif prd:
+    out = subprocess.run(["git", "ls-remote", "--tags", "--refs", os.environ["REPO"]],
+                         capture_output=True, text=True, check=True).stdout
+    tags = [line.split("refs/tags/")[1] for line in out.splitlines()]
+    tags = sorted((t for t in tags if release.match(t)), key=lambda t: [int(x) for x in t[1:].split(".")])
+    prd_ref = tags[-1] if tags else ""
+if prd and not prd_ref:
+    print("::warning::No vYYYY.M.D release tag yet, so prd does not run. Tag a release to deploy it.")
+    prd = False
+
+print(f"dev={dev} prd={prd} prd_ref={prd_ref}")
+with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+    f.write(f"dev={str(dev).lower()}\nprd={str(prd).lower()}\nprd_ref={prd_ref}\n")
 """
 
 JOB = """\
-  {name}:
+  {name}_{environment}:
     # {description}
-{needs}    uses: ./.github/workflows/dag-task.yml
+    needs: [{needs}]
+    if: needs.plan.outputs.{environment} == 'true'
+    uses: ./.github/workflows/dag-task.yml
     permissions:
       contents: read
       id-token: write
     with:
       task: {name}
       dbt: {dbt}
+      environment: {environment}
+      ref: {ref}
 """
+
+REFS = {"dev": "${{ github.sha }}", "prd": "${{ needs.plan.outputs.prd_ref }}"}
 
 
 def render(tasks):
     files = {}
+    plan = "".join(f"          {line}\n" if line else "\n" for line in PLAN.strip().splitlines())
     for root, order in pipelines(tasks).items():
-        out = HEADER.format(root=root, cron=tasks[root]["trigger"]["cron_schedule"])
+        out = HEADER.format(root=root, cron=tasks[root]["trigger"]["cron_schedule"]) + plan
         jobs = []
-        for name in order:
-            cfg = tasks[name]
-            upstream = cfg["trigger"].get("depends_on")
-            jobs.append(JOB.format(
-                name=name,
-                description=cfg.get("description", ""),
-                needs=f"    needs: {upstream}\n" if upstream else "",
-                dbt="true" if "dbt_command" in cfg else "false",
-            ))
-        files[WORKFLOWS_DIR / f"{PREFIX}{root}.yml"] = out + "\n".join(jobs)
+        for environment in ENVIRONMENTS:
+            for name in order:
+                cfg = tasks[name]
+                if environment not in cfg["environments"]:
+                    continue
+                needs = ["plan"] + [f"{u}_{environment}" for u in env_depends_on(tasks, name, environment)]
+                jobs.append(JOB.format(
+                    name=name,
+                    environment=environment,
+                    description=cfg.get("description", ""),
+                    needs=", ".join(needs),
+                    dbt="true" if "dbt_command" in cfg else "false",
+                    ref=REFS[environment],
+                ))
+        files[WORKFLOWS_DIR / f"{PREFIX}{root}.yml"] = out + "\n" + "\n".join(jobs)
     return files
 
 

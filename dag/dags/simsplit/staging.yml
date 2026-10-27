@@ -5,7 +5,8 @@ dbt_selector: "tag:simsplit,tag:staging"
 
 trigger:
   type: upstream
-  depends_on: simsplit_raw_ingestion
+  # In prd, where the fake task doesn't run, only simsplit_raw_ingestion.
+  depends_on: [simsplit_raw_ingestion, simsplit_fake_ingestion]
 
 retry:
   max_retries: 2

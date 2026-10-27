@@ -18,27 +18,40 @@ error reports and usage events its telemetry endpoint writes to `simsplit_raw`).
 | Layer | Tool | Entry point |
 |---|---|---|
 | Ingestion | dlt | `dlt/pipeline.py <source>`, `dlt/sources/<source>.py` |
-| Warehouse | BigQuery | project `dataplatform-as-se1-prd`, location `asia-southeast1` |
+| Warehouse | BigQuery | projects `dataplatform-as-se1-dev` (main) and `dataplatform-as-se1-prd` (release tags), location `asia-southeast1` |
 | Transformation | dbt (dbt-bigquery) | `dbt/` |
 | Orchestration | YAML DAGs → GitHub Actions | `dag/dags/`, `dag/render.py` |
 | Dashboard | Evidence → Cloudflare Pages (behind Access) | `evidence/` |
 
-Infrastructure (GCP project, Workload Identity Federation, the `GCP_PROJECT_ID`,
-`GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` repo variables) lives in
-everything-as-code, `terraform/gcp/dataplatform-as-se1-prd` and `terraform/github`.
+Infrastructure (GCP projects, Workload Identity Federation, the `dev` and `prd` GitHub
+Environments with `GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`,
+`SIMSPLIT_FIREBASE_PROJECT` and `DASHBOARD_PROJECT`) lives in everything-as-code,
+`terraform/gcp/dataplatform-as-se1-{dev,prd}` and `terraform/github`.
+
+### Environments
+
+- **dev** (`dataplatform-as-se1-dev`): PR CI, and the DAGs on every push to `main` and daily.
+  Reads `simsplit-as-se1-dev`'s Firestore and the dev telemetry endpoint's tables, plus fake
+  data (`dlt/sources/simsplit_fake.py`, IDs prefixed `fake-`, task `simsplit_fake_ingestion`,
+  dev only).
+- **prd** (`dataplatform-as-se1-prd`): the DAGs on a `vYYYY.M.D` tag push and daily, always
+  from the latest release tag. A merge to `main` reaches prd only once tagged.
+- Every BigQuery job checks that its environment's variables name its own projects, since
+  missing environment variables would fall back to repo-level ones. Never point fake data at
+  prd: `dlt/pipeline.py` refuses projects not ending in `-dev`.
 
 ### Datasets
 
 `dbt/macros/generate_schema_name.sql` maps each model's `+schema` (`<project>_<layer>`) to a dataset:
 
-- `prod` → `<project>_<layer>` (only the scheduled DAG workflows use prod)
+- `prod` → `<project>_<layer>` (only the DAG workflows use prod, in each environment's project)
 - `ci` → `$DBT_CI_DATASET_<project>_<layer>`, dropped by `scripts/drop_datasets.py` after the run
 - `dev` → `dev_$USER_<project>_<layer>`
 
 dlt writes raw data to `<source>_raw` with the same prefixes; the project's `_sources.yml`
 computes the same name. Exception: sim-split's `error_reports` and `usage_events` are written
-by its telemetry endpoint to prod `simsplit_raw` only, so the `simsplit_telemetry` source reads
-`simsplit_raw` from every target.
+by its telemetry endpoint (one per environment) to the project's `simsplit_raw` only, so the
+`simsplit_telemetry` source reads `simsplit_raw` from every target.
 
 sim-split data is personal (names, emails, amounts): `dim_user` is rebuilt from a replaced
 `users` load and never snapshotted, so a deleted account leaves the warehouse with the next
@@ -177,10 +190,10 @@ Workflows are thin callers of reusable workflows in [mazino2d/github-workflows](
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `ci.yml` | PR + push `main` | `lint`: pre-commit + `dag.render --check`; `dbt` (local): dlt ingest + `dbt build` into `ci_<run>_*` datasets, then drops them; actionlint + CodeQL |
+| `ci.yml` | PR + push `main` | `lint`: pre-commit + `dag.render --check`; `dbt` (local, dev environment): dlt ingest + `dbt build` into `ci_<run>_*` datasets in the dev project, then drops them; actionlint + CodeQL |
 | `docs.yml` | PR (build only) + push `main` | build MkDocs + dbt docs (`--no-compile --empty-catalog`: lineage and YAML docs only, no BigQuery access), deploy to GitHub Pages |
-| `dag-task.yml` | called by `dag-*.yml` | run one DAG task against prod |
-| `dag-*.yml` | cron + manual (generated) | one pipeline per cron task |
-| `dashboard.yml` | after `DAG simsplit_raw_ingestion` + manual | build the Evidence dashboard from `simsplit_metrics` and deploy it to Cloudflare Pages behind Access |
+| `dag-task.yml` | called by `dag-*.yml` | run one DAG task in one environment at one ref |
+| `dag-*.yml` | cron + push `main` (dev) + push `v*` tag (prd) + manual (generated) | one pipeline per cron task, a job chain per environment |
+| `dashboard.yml` | after `DAG simsplit_raw_ingestion` + manual | build the Evidence dashboard per environment from `simsplit_metrics` and deploy it to that environment's Cloudflare Pages project behind Access |
 
 `mkdocs.yml` inherits the shared theme from `.mkdocs/base.yml` (fetched by the workflow, and by `make blog` locally).
