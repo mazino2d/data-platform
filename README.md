@@ -9,14 +9,50 @@ Jaffle Shop demo, a fictional e-commerce store; SimSplit follows.
 | Layer | Tool | Role |
 |---|---|---|
 | Ingestion | [dlt](https://dlthub.com) | Load raw data from a backend into BigQuery |
-| Warehouse | [BigQuery](https://cloud.google.com/bigquery) | Project `dataplatform-as-se1-prd`, location `asia-southeast1` |
+| Warehouse | [BigQuery](https://cloud.google.com/bigquery) | Projects `dataplatform-as-se1-dev` and `dataplatform-as-se1-prd`, location `asia-southeast1` |
 | Transformation | [dbt](https://www.getdbt.com) | Build and test data models in layers |
 | Orchestration | YAML DAGs → GitHub Actions | `dag/dags/` rendered into scheduled workflows (any orchestrator can read the same YAML) |
 
-The GCP project, the Workload Identity Federation for this repo's workflows and the
-`GCP_*` repository variables are managed in
+The GCP projects, the Workload Identity Federation for this repo's workflows and the
+`dev` and `prd` GitHub Environments are managed in
 [everything-as-code](https://github.com/mazino2d/everything-as-code)
-(`terraform/gcp/dataplatform-as-se1-prd`).
+(`terraform/gcp/dataplatform-as-se1-{dev,prd}`, `terraform/github`).
+
+---
+
+## Environments and release
+
+| | dev | prd |
+|---|---|---|
+| BigQuery project | `dataplatform-as-se1-dev` | `dataplatform-as-se1-prd` |
+| sim-split Firestore | `simsplit-as-se1-dev` | `simsplit-as-se1-prd` |
+| sim-split telemetry | dev builds, via the dev endpoint | released builds |
+| Fake data (`fake-` IDs) | `simsplit_fake_ingestion`, daily | never: `dlt/pipeline.py` refuses |
+| Code it runs | `main` | the latest `vYYYY.M.D` tag |
+| Dashboard | `data-platform-dashboard-dev.pages.dev` | `data-platform-dashboard.pages.dev` |
+
+Each is a GitHub Environment with the same variable names (`GCP_PROJECT_ID`,
+`GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`, `SIMSPLIT_FIREBASE_PROJECT`,
+`DASHBOARD_PROJECT`), and every job checks that they name its own projects.
+
+```
+feature branch ──PR──► CI (dev env): dlt + dbt build into ci_<run>_* in the dev project, dropped after
+      │
+      ▼ squash-merge
+main ──push──► DAG workflows run in dev ──► dev dashboard
+      │        check the models and charts on dev and fake data
+      ▼ git tag vYYYY.M.D && git push origin vYYYY.M.D
+tag  ──push──► DAG workflows run in prd from the tag ──► prd dashboard
+```
+
+The daily schedule runs both: dev from `main`, prd from the latest release tag. So a
+merge never reaches prd until it is tagged. To roll back prd, delete the bad tag, or tag
+the last good commit again with a newer version, then run the DAG workflow with
+`environment: prd`.
+
+Fake data rebuilds the same world for the last `SIMSPLIT_FAKE_DAYS` days (default 90) on
+every run, so runs are idempotent. To clear it, delete the rows whose ID starts with
+`fake-` from `simsplit_raw`.
 
 ---
 
@@ -26,7 +62,7 @@ Each project and layer gets its own dataset, named by `dbt/macros/generate_schem
 
 | Target | Dataset | Example |
 |---|---|---|
-| `prod` (scheduled DAGs) | `<project>_<layer>` | `jaffle_shop_staging` |
+| `prod` (scheduled DAGs, in each environment's project) | `<project>_<layer>` | `jaffle_shop_staging` |
 | `ci` (pull requests) | `ci_<run>_<project>_<layer>`, dropped after the run | `ci_123_1_jaffle_shop_staging` |
 | `dev` (local) | `dev_<user>_<project>_<layer>` | `dev_alice_jaffle_shop_staging` |
 
@@ -151,7 +187,10 @@ The configs say nothing about the orchestrator:
 - `dag/run.py <task>` runs one task with its retries.
 - `dag/render.py` writes one GitHub Actions workflow per pipeline,
   `.github/workflows/dag-<root task>.yml`, where each task is a job calling
-  `dag-task.yml` and upstream triggers become `needs`.
+  `dag-task.yml` and upstream triggers become `needs`. Each task is rendered once per
+  environment it runs in (`environments:`, default `[dev, prd]`); a `plan` job picks
+  the environments and the ref (see [Environments and release](#environments-and-release)).
+  `depends_on` can list several tasks; one missing from an environment is skipped over.
 
 ```bash
 make dags                    # re-render the workflows after editing dag/dags/
@@ -199,7 +238,7 @@ data-platform/
 ### Prerequisites
 
 - Python 3.11+
-- `gcloud` with access to the `dataplatform-as-se1-prd` project
+- `gcloud` with access to the `dataplatform-as-se1-dev` project (local runs belong in dev)
 
 ### Setup
 

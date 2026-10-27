@@ -4,7 +4,22 @@ name: DAG simsplit_raw_ingestion
 on:
   schedule:
     - cron: "0 5 * * *"
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - dag/**
+      - dbt/**
+      - dlt/**
+      - pyproject.toml
+      - .github/workflows/dag-*.yml
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "dev runs the chosen ref; prd runs the latest vYYYY.M.D tag"
+        type: choice
+        options: [dev, prd]
+        default: dev
 
 concurrency:
   group: dag-simsplit_raw_ingestion
@@ -14,8 +29,57 @@ permissions:
   contents: read
 
 jobs:
-  simsplit_raw_ingestion:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      dev: ${{ steps.plan.outputs.dev }}
+      prd: ${{ steps.plan.outputs.prd }}
+      prd_ref: ${{ steps.plan.outputs.prd_ref }}
+    steps:
+      - id: plan
+        shell: python
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT: ${{ inputs.environment }}
+          REPO: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          import os
+          import re
+          import subprocess
+
+          event, ref, choice = os.environ["EVENT"], os.environ["GITHUB_REF"], os.environ["INPUT"]
+          release = re.compile(r"^v\d+\.\d+\.\d+$")
+          tag = ref.removeprefix("refs/tags/") if ref.startswith("refs/tags/") else None
+
+          if event == "schedule":
+              dev, prd = True, True
+          elif event == "push":
+              dev, prd = tag is None, tag is not None
+          else:
+              dev, prd = choice == "dev", choice == "prd"
+
+          prd_ref = ""
+          if prd and tag and release.match(tag):
+              prd_ref = tag
+          elif prd:
+              out = subprocess.run(["git", "ls-remote", "--tags", "--refs", os.environ["REPO"]],
+                                   capture_output=True, text=True, check=True).stdout
+              tags = [line.split("refs/tags/")[1] for line in out.splitlines()]
+              tags = sorted((t for t in tags if release.match(t)), key=lambda t: [int(x) for x in t[1:].split(".")])
+              prd_ref = tags[-1] if tags else ""
+          if prd and not prd_ref:
+              print("::warning::No vYYYY.M.D release tag yet, so prd does not run. Tag a release to deploy it.")
+              prd = False
+
+          print(f"dev={dev} prd={prd} prd_ref={prd_ref}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"dev={str(dev).lower()}\nprd={str(prd).lower()}\nprd_ref={prd_ref}\n")
+
+  simsplit_raw_ingestion_dev:
     # Copy sim-split's Firestore data (users, groups, members, expenses, settlements, activity) into BigQuery via dlt.
+    needs: [plan]
+    if: needs.plan.outputs.dev == 'true'
     uses: ./.github/workflows/dag-task.yml
     permissions:
       contents: read
@@ -23,10 +87,27 @@ jobs:
     with:
       task: simsplit_raw_ingestion
       dbt: false
+      environment: dev
+      ref: ${{ github.sha }}
 
-  simsplit_staging:
+  simsplit_fake_ingestion_dev:
+    # Add fake sim-split data (fake- IDs) to the dev warehouse, after the Firestore copy, so dashboards have data.
+    needs: [plan, simsplit_raw_ingestion_dev]
+    if: needs.plan.outputs.dev == 'true'
+    uses: ./.github/workflows/dag-task.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      task: simsplit_fake_ingestion
+      dbt: false
+      environment: dev
+      ref: ${{ github.sha }}
+
+  simsplit_staging_dev:
     # Clean the Firestore copy and the telemetry tables into staging views.
-    needs: simsplit_raw_ingestion
+    needs: [plan, simsplit_raw_ingestion_dev, simsplit_fake_ingestion_dev]
+    if: needs.plan.outputs.dev == 'true'
     uses: ./.github/workflows/dag-task.yml
     permissions:
       contents: read
@@ -34,10 +115,13 @@ jobs:
     with:
       task: simsplit_staging
       dbt: true
+      environment: dev
+      ref: ${{ github.sha }}
 
-  simsplit_core:
+  simsplit_core_dev:
     # Users, groups, expenses, settlements, usage events and error reports for analysis.
-    needs: simsplit_staging
+    needs: [plan, simsplit_staging_dev]
+    if: needs.plan.outputs.dev == 'true'
     uses: ./.github/workflows/dag-task.yml
     permissions:
       contents: read
@@ -45,10 +129,13 @@ jobs:
     with:
       task: simsplit_core
       dbt: true
+      environment: dev
+      ref: ${{ github.sha }}
 
-  simsplit_metrics:
+  simsplit_metrics_dev:
     # Aggregates for the Evidence dashboard (no uid, name or email).
-    needs: simsplit_core
+    needs: [plan, simsplit_core_dev]
+    if: needs.plan.outputs.dev == 'true'
     uses: ./.github/workflows/dag-task.yml
     permissions:
       contents: read
@@ -56,3 +143,61 @@ jobs:
     with:
       task: simsplit_metrics
       dbt: true
+      environment: dev
+      ref: ${{ github.sha }}
+
+  simsplit_raw_ingestion_prd:
+    # Copy sim-split's Firestore data (users, groups, members, expenses, settlements, activity) into BigQuery via dlt.
+    needs: [plan]
+    if: needs.plan.outputs.prd == 'true'
+    uses: ./.github/workflows/dag-task.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      task: simsplit_raw_ingestion
+      dbt: false
+      environment: prd
+      ref: ${{ needs.plan.outputs.prd_ref }}
+
+  simsplit_staging_prd:
+    # Clean the Firestore copy and the telemetry tables into staging views.
+    needs: [plan, simsplit_raw_ingestion_prd]
+    if: needs.plan.outputs.prd == 'true'
+    uses: ./.github/workflows/dag-task.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      task: simsplit_staging
+      dbt: true
+      environment: prd
+      ref: ${{ needs.plan.outputs.prd_ref }}
+
+  simsplit_core_prd:
+    # Users, groups, expenses, settlements, usage events and error reports for analysis.
+    needs: [plan, simsplit_staging_prd]
+    if: needs.plan.outputs.prd == 'true'
+    uses: ./.github/workflows/dag-task.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      task: simsplit_core
+      dbt: true
+      environment: prd
+      ref: ${{ needs.plan.outputs.prd_ref }}
+
+  simsplit_metrics_prd:
+    # Aggregates for the Evidence dashboard (no uid, name or email).
+    needs: [plan, simsplit_core_prd]
+    if: needs.plan.outputs.prd == 'true'
+    uses: ./.github/workflows/dag-task.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      task: simsplit_metrics
+      dbt: true
+      environment: prd
+      ref: ${{ needs.plan.outputs.prd_ref }}

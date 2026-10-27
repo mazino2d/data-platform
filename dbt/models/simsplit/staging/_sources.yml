@@ -35,8 +35,9 @@ sources:
 
   - name: simsplit_telemetry
     description: >
-      Error reports and usage events written by sim-split's telemetry endpoint (Cloud Run,
-      BigQuery Storage Write API). Only prod has them, so every target reads simsplit_raw.
+      Error reports and usage events written by sim-split's telemetry endpoint of the same
+      environment (Cloud Run, BigQuery Storage Write API), plus fake rows in dev. Only the
+      bare simsplit_raw has them, so every target reads it.
     schema: simsplit_raw
     tables:
       - name: error_reports

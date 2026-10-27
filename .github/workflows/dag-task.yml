@@ -1,9 +1,15 @@
 name: DAG task
 
-# Runs one task from dag/dags/ against prod BigQuery: `python -m dag.run <task>`
+# Runs one task from dag/dags/ in one environment: `python -m dag.run <task>`
 # handles the task's retries. Called by the generated dag-<pipeline>.yml
-# workflows (python -m dag.render). Kept local because it needs id-token write
-# for Workload Identity Federation.
+# workflows (python -m dag.render), which pick the environment and the ref:
+#   - dev → dataplatform-as-se1-dev, any ref (main, or a manual run's)
+#   - prd → dataplatform-as-se1-prd, a vYYYY.M.D release tag only
+# The job runs in the GitHub Environment of the same name (managed in
+# mazino2d/everything-as-code), which holds the project, the Workload Identity
+# provider and the service account. DBT_TARGET is prod in both: the bare
+# <project>_<layer> datasets of that environment's project. Kept local because
+# it needs id-token write for Workload Identity Federation.
 on:
   workflow_call:
     inputs:
@@ -14,6 +20,14 @@ on:
         description: Install dbt packages before running.
         type: boolean
         default: false
+      environment:
+        description: dev or prd
+        type: string
+        required: true
+      ref:
+        description: The commit or tag to run.
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -23,12 +37,29 @@ jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    environment: ${{ inputs.environment }}
     env:
       DBT_TARGET: prod
+      ENVIRONMENT: ${{ inputs.environment }}
+      REF: ${{ inputs.ref }}
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      SIMSPLIT_FIREBASE_PROJECT: ${{ vars.SIMSPLIT_FIREBASE_PROJECT }}
     steps:
+      # Environment variables fall back to the repo-level ones (prd) when the
+      # environment lacks them, so the project must match the environment.
+      - name: Check environment
+        run: |
+          if [[ "$GCP_PROJECT_ID" != "dataplatform-as-se1-$ENVIRONMENT" || "$SIMSPLIT_FIREBASE_PROJECT" != "simsplit-as-se1-$ENVIRONMENT" ]]; then
+            echo "::error::$ENVIRONMENT must use dataplatform-as-se1-$ENVIRONMENT and simsplit-as-se1-$ENVIRONMENT, not '$GCP_PROJECT_ID' and '$SIMSPLIT_FIREBASE_PROJECT'"
+            exit 1
+          fi
+          if [[ "$ENVIRONMENT" == prd && ! "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::prd runs only a vYYYY.M.D release tag, not '$REF'"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - uses: actions/setup-python@v7
         with:

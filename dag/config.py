@@ -9,8 +9,11 @@ One YAML file is one task:
     dbt_selector:  --select value and optional
     dbt_exclude:   --exclude value
     trigger:       {type: cron, cron_schedule: "<UTC cron>"}
-                   or {type: upstream, depends_on: <task name>}
+                   or {type: upstream, depends_on: <task name or list of names>}
     retry:         {max_retries: n, retry_delay_minutes: m}
+    environments:  optional subset of [dev, prd] the task runs in (default both).
+                   An upstream task missing from an environment is skipped over,
+                   so a dev-only task can sit between two shared ones.
 
 Nothing here is specific to an orchestrator: render.py turns the configs into
 GitHub Actions workflows and run.py executes one task, so another orchestrator
@@ -22,6 +25,7 @@ from pathlib import Path
 import yaml
 
 DAG_CONFIG_DIR = Path(__file__).parent / "dags"
+ENVIRONMENTS = ["dev", "prd"]
 
 
 def load_tasks():
@@ -36,13 +40,16 @@ def load_tasks():
         trigger = cfg.get("trigger", {})
         if trigger.get("type") not in ("cron", "upstream"):
             raise ValueError(f"{path}: trigger.type must be cron or upstream")
+        environments = cfg.setdefault("environments", ENVIRONMENTS)
+        if not environments or set(environments) - set(ENVIRONMENTS):
+            raise ValueError(f"{path}: environments must be a non-empty subset of {ENVIRONMENTS}")
         cfg["path"] = path
         tasks[name] = cfg
 
     for name, cfg in tasks.items():
-        trigger = cfg["trigger"]
-        if trigger["type"] == "upstream" and trigger["depends_on"] not in tasks:
-            raise ValueError(f"{cfg['path']}: unknown upstream task {trigger['depends_on']}")
+        for upstream in depends_on(cfg):
+            if upstream not in tasks:
+                raise ValueError(f"{cfg['path']}: unknown upstream task {upstream}")
 
     # A task that no cron root reaches (a depends_on cycle) would never be scheduled.
     scheduled = {name for order in pipelines(tasks).values() for name in order}
@@ -61,21 +68,47 @@ def task_command(cfg):
     return cmd
 
 
+def depends_on(cfg):
+    upstream = cfg["trigger"].get("depends_on", [])
+    return [upstream] if isinstance(upstream, str) else list(upstream)
+
+
+def env_depends_on(tasks, name, environment):
+    """Upstream tasks of name in an environment: one missing from it is
+    replaced by its own upstream tasks there."""
+    result = []
+    for upstream in depends_on(tasks[name]):
+        if environment in tasks[upstream]["environments"]:
+            result.append(upstream)
+        else:
+            result.extend(env_depends_on(tasks, upstream, environment))
+    return list(dict.fromkeys(result))
+
+
 def pipelines(tasks):
-    """Group tasks into one pipeline per cron-triggered root: {root: [tasks in run order]}."""
+    """Group tasks into one pipeline per cron-triggered root: {root: [tasks in run order]}.
+    A task runs after all its upstream tasks."""
     children = {}
     for name, cfg in tasks.items():
-        if cfg["trigger"]["type"] == "upstream":
-            children.setdefault(cfg["trigger"]["depends_on"], []).append(name)
+        for upstream in depends_on(cfg):
+            children.setdefault(upstream, []).append(name)
 
     result = {}
     for name, cfg in tasks.items():
         if cfg["trigger"]["type"] != "cron":
             continue
-        order, queue = [], [name]
+        reachable, queue = set(), [name]
         while queue:
             current = queue.pop(0)
+            if current not in reachable:
+                reachable.add(current)
+                queue.extend(children.get(current, []))
+        order, ready = [], [name]
+        while ready:
+            current = ready.pop(0)
             order.append(current)
-            queue.extend(sorted(children.get(current, [])))
+            for child in sorted(children.get(current, [])):
+                if child not in order and all(u in order for u in depends_on(tasks[child]) if u in reachable):
+                    ready.append(child)
         result[name] = order
     return result
