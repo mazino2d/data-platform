@@ -50,8 +50,9 @@ merge never reaches prd until it is tagged. To roll back prd, delete the bad tag
 the last good commit again with a newer version, then run the DAG workflow with
 `environment: prd`.
 
-Fake data rebuilds the same world for the last `SIMSPLIT_FAKE_DAYS` days (default 90) on
-every run, so runs are idempotent. To clear it, delete the rows whose ID starts with
+Fake data rebuilds the same world from a fixed start date (`START` in
+`dlt/sources/simsplit_fake.py`) up to yesterday on every run, so runs are idempotent and
+each day only adds that day's rows. To clear it, delete the rows whose ID starts with
 `fake-` from `simsplit_raw`.
 
 ---

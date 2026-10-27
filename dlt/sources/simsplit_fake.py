@@ -7,8 +7,9 @@ the dev app and its Firestore send, and to delete:
     DELETE FROM simsplit_raw.<table> WHERE STARTS_WITH(<id column>, 'fake-')
 
 The data is a deterministic function of the day: every run rebuilds the same
-world for the last SIMSPLIT_FAKE_DAYS days (default 90), so runs are
-idempotent and each new day adds that day's rows.
+world from a fixed START up to yesterday (never today, so nothing is dated in
+the future), so runs are idempotent and each new day only adds that day's rows.
+Nothing depends on the run date except where the world ends.
 
 - Firestore-shaped tables (users, groups, members, expenses, settlements,
   activity): this dlt source, merged on the document path into the same
@@ -23,7 +24,6 @@ pipeline.py refuses to run this against any project not ending in "-dev".
 """
 
 import hashlib
-import os
 import random
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -34,9 +34,10 @@ from google.cloud import bigquery
 from sources.simsplit import AUDIT, _columns
 
 SEED = 7
-DAYS = int(os.getenv("SIMSPLIT_FAKE_DAYS", "90"))
-TODAY = datetime.now(timezone.utc).date()
-START = TODAY - timedelta(days=DAYS - 1)
+# Fixed, so a day's data never changes from one run to the next. Changing it
+# changes every fake row: delete the old ones first.
+START = date(2026, 7, 30)
+END = datetime.now(timezone.utc).date() - timedelta(days=1)
 
 CURRENCIES = ["VND", "VND", "VND", "USD", "EUR"]
 CATEGORIES = ["food", "transport", "lodging", "shopping", "entertainment", "other"]
@@ -44,8 +45,7 @@ LANGUAGES = ["vi", "vi", "en"]
 PLATFORMS = ["android", "android", "android", "web"]
 GROUP_EMOJIS = ["🏖️", "🍜", "🏠", "🎉", "✈️", "⚽"]
 
-# One release every two weeks, counted back from today.
-RELEASES = [TODAY - timedelta(days=14 * i) for i in range(DAYS // 14 + 1)][::-1]
+# One release every two weeks from START.
 
 SCREENS = [
     "/", "/groups/:groupId", "/groups/:groupId/expenses/add", "/groups/:groupId/expenses/:expenseId",
@@ -87,12 +87,12 @@ def _ms(ts):
 
 
 def _days():
-    return [START + timedelta(days=i) for i in range(DAYS)]
+    return [START + timedelta(days=i) for i in range((END - START).days + 1)]
 
 
 def _version(day):
-    released = [r for r in RELEASES if r <= day]
-    return (released[-1] if released else RELEASES[0]).strftime("%Y.%-m.%-d")
+    release = START + timedelta(days=(day - START).days // 14 * 14)
+    return release.strftime("%Y.%-m.%-d")
 
 
 # ── The world: who signed up when, and who is active on a day ──────────────
@@ -126,23 +126,29 @@ def _world():
     """Groups with members, expenses, settlements and activity, built from the users."""
     users = _users()
     fake = Faker()
-    fake.seed_instance(SEED)
-    names = {u["uid"]: fake.name() for u in users}
+
+    # Reseeded per entity, so a name never depends on how many came before.
+    def faked(method, *key):
+        fake.seed_instance(_rng("faker", *key).getrandbits(32))
+        return getattr(fake, method)()
+
+    names = {u["uid"]: faked("name", u["uid"]) for u in users}
     groups = []
     for owner in users:
         rng = owner["rng"]
         if rng.random() > 0.55:
             continue
         created = owner["created_at"] + timedelta(minutes=rng.randint(1, 600))
-        if created.date() > TODAY:
+        if created.date() > END:
             continue
         gid = _id("g", owner["uid"])
-        # Friends who join later, from accounts that exist by then.
-        joined = [u for u in users if u is not owner and u["created_at"] <= created + timedelta(days=3)]
+        # Friends who join later, from accounts that already exist, so the
+        # choice never changes as days are added.
+        joined = [u for u in users if u is not owner and u["created_at"] <= created]
         friends = rng.sample(joined, k=min(len(joined), rng.randint(0, 3)))
         groups.append({
             "id": gid, "owner": owner, "created": created, "rng": _rng("group", gid),
-            "name": rng.choice(["Trip to ", "Dinner with ", "Flat ", "Team "]) + fake.city(),
+            "name": rng.choice(["Trip to ", "Dinner with ", "Flat ", "Team "]) + faked("city", gid),
             "currency": rng.choice(CURRENCIES), "friends": friends, "names": names,
         })
     return users, names, groups
@@ -191,37 +197,47 @@ def simsplit_fake():
             })
 
         activity(owner, "create", "group", g["id"], created)
-        members = []
+        # Every draw below comes from its own RNG, keyed by what it decides, so
+        # adding days never shifts the draws of earlier ones.
+        life = rng.randint(3, 60)
+        settlements = rng.randint(0, 2)
+        members = []  # (member ID, joined at), including members who join after END
         for i, uid in enumerate(accounts + [None] * rng.randint(0, 2)):
             mid = _id("m", g["id"], i)
             joined = created if uid in (owner, None) else created + timedelta(hours=rng.randint(1, 72))
-            if joined.date() > TODAY:
+            color = rng.randint(0, 2**31)
+            members.append((mid, joined))
+            if joined.date() > END:
                 continue
-            members.append(mid)
             member_rows.append({
                 "path": f"{base}/members/{mid}", "doc_id": mid, "group_id": g["id"],
                 "name": g["names"][uid] if uid else f"Guest {i}", "emoji": None,
-                "avatar_color_value": rng.randint(0, 2**31), "linked_uid": uid, **audit(owner, joined, joined),
+                "avatar_color_value": color, "linked_uid": uid, **audit(owner, joined, joined),
             })
             if uid and uid != owner:
                 activity(uid, "join", "member", mid, joined)
 
-        # Expenses until the group goes quiet; the busiest in its first weeks.
-        life = rng.randint(3, 60)
+        def present(at):
+            return [mid for mid, joined in members if joined <= at]
+
+        # Expenses until the group goes quiet.
         day = created.date()
-        while day <= min(TODAY, created.date() + timedelta(days=life)):
-            for n in range(rng.choice([0, 0, 0, 1, 1, 2, 3])):
+        while day <= min(END, created.date() + timedelta(days=life)):
+            day_rng = _rng("expenses", g["id"], day)
+            for n in range(day_rng.choice([0, 0, 0, 1, 1, 2, 3])):
+                rng = _rng("expense", g["id"], day, n)
                 at = _at(day, rng)
                 if at < created:
                     continue
                 eid = _id("e", g["id"], day, n)
-                payer = rng.choice(members)
+                sharing = present(at)
+                payer = rng.choice(sharing)
                 amount = rng.randint(20, 800) * (1000 if g["currency"] == "VND" else 100)
-                share = amount // len(members)
+                share = amount // len(sharing)
                 splits = [
                     {"id": _id("s", eid, m), "memberId": m, "value": 1,
-                     "amountCents": share + (amount - share * len(members) if m == members[0] else 0)}
-                    for m in members
+                     "amountCents": share + (amount - share * len(sharing) if m == sharing[0] else 0)}
+                    for m in sharing
                 ]
                 author = rng.choice(accounts)
                 deleted = rng.random() < 0.03
@@ -236,12 +252,13 @@ def simsplit_fake():
                 activity(author, "create", "expense", eid, at)
             day += timedelta(days=1)
 
-        for n in range(rng.randint(0, 2)):
+        for n in range(settlements):
+            rng = _rng("settlement", g["id"], n)
             at = created + timedelta(days=rng.randint(1, life + 1), hours=rng.randint(0, 12))
-            if at.date() > TODAY or len(members) < 2:
+            if at.date() > END or len(present(at)) < 2:
                 continue
             sid = _id("t", g["id"], n)
-            src, dst = rng.sample(members, 2)
+            src, dst = rng.sample(present(at), 2)
             settlement_rows.append({
                 "path": f"{base}/settlements/{sid}", "doc_id": sid, "group_id": g["id"],
                 "from_member_id": src, "to_member_id": dst, "amount_cents": rng.randint(50, 500) * 1000,
