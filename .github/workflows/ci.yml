@@ -81,6 +81,7 @@ jobs:
     steps:
       # Without the dev environment's variables, the repo-level ones (prd) apply.
       - name: Check environment
+        id: environment
         run: |
           if [[ "$GCP_PROJECT_ID" != dataplatform-as-se1-dev || "$SIMSPLIT_FIREBASE_PROJECT" != simsplit-as-se1-dev ]]; then
             echo "::error::CI must use dataplatform-as-se1-dev and simsplit-as-se1-dev, not '$GCP_PROJECT_ID' and '$SIMSPLIT_FIREBASE_PROJECT'"
@@ -109,7 +110,7 @@ jobs:
           dbt deps --profiles-dir .
           dbt build --profiles-dir . --target ci
       - name: Drop CI datasets
-        if: always()
+        if: always() && steps.environment.outcome == 'success'
         run: python scripts/drop_datasets.py "$DBT_CI_DATASET"
 
   workflows:
