@@ -85,6 +85,7 @@ def simsplit():
         columns=_columns(
             display_name="text", email="text", created_at="timestamp",
             consent__agreed_at="timestamp", consent__policy_version="text",
+            member_name="text",
         ),
     )
     def users():
@@ -99,7 +100,7 @@ def simsplit():
         columns=_columns(
             name="text", emoji="text", color_value="bigint", currency_code="text",
             is_archived="bool", owner_uid="text", updated_at="timestamp",
-            member_uids="json", **AUDIT,
+            member_uids="json", settlement_mode="text", settlement_hub_member_id="text", **AUDIT,
         ),
     )
     def groups(updated_at=dlt.sources.incremental("updatedAt", initial_value=EPOCH)):
