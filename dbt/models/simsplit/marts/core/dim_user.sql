@@ -4,6 +4,7 @@
 SELECT
     uid,
     display_name,
+    member_name,
     email,
     created_at,
     agreed_at,

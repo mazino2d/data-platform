@@ -4,6 +4,8 @@
 SELECT
     doc_id AS uid,
     display_name,
+    -- The name the account goes by in groups (sim-split R-7 #112).
+    member_name,
     email,
     created_at,
     consent__agreed_at AS agreed_at,

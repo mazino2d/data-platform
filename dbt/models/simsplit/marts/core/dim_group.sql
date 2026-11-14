@@ -27,6 +27,7 @@ SELECT
     g.account_count,
     g.created_at,
     g.is_archived,
+    g.settlement_mode,
     g.is_deleted,
     e.first_expense_at,
     e.last_expense_at,

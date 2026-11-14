@@ -167,12 +167,14 @@ def simsplit_fake():
         columns=_columns(
             display_name="text", email="text", created_at="timestamp",
             consent__agreed_at="timestamp", consent__policy_version="text",
+            member_name="text",
         ),
     )
     def users_():
         for u in users:
             yield {
                 "path": f"users/{u['uid']}", "doc_id": u["uid"], "display_name": names[u["uid"]],
+                "member_name": names[u["uid"]].split()[-1],
                 "email": f"{u['uid']}@example.com", "created_at": u["created_at"],
                 "consent": {"agreed_at": u["created_at"], "policy_version": "2026-10-24"},
             }
@@ -185,7 +187,8 @@ def simsplit_fake():
         group_rows.append({
             "path": base, "doc_id": g["id"], "name": g["name"], "emoji": rng.choice(GROUP_EMOJIS),
             "color_value": rng.randint(0, 2**31), "currency_code": g["currency"], "is_archived": False,
-            "owner_uid": owner, "member_uids": accounts, **audit(owner, created, created),
+            "owner_uid": owner, "member_uids": accounts, "settlement_mode": rng.choice(["hub", "simplified"]),
+            "settlement_hub_member_id": None, **audit(owner, created, created),
         })
 
         def activity(actor, action, entity_type, entity_id, at):
@@ -283,7 +286,8 @@ def simsplit_fake():
     return (
         users_,
         resource("groups", group_rows, name="text", emoji="text", color_value="bigint", currency_code="text",
-                 is_archived="bool", owner_uid="text", updated_at="timestamp", member_uids="json", **AUDIT),
+                 is_archived="bool", owner_uid="text", updated_at="timestamp", member_uids="json",
+                 settlement_mode="text", settlement_hub_member_id="text", **AUDIT),
         resource("members", member_rows, name="text", emoji="text", avatar_color_value="bigint",
                  linked_uid="text", group_id="text", updated_at="timestamp", **AUDIT),
         resource("expenses", expense_rows, title="text", amount_cents="bigint", currency_code="text",
