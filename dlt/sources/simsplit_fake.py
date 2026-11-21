@@ -15,8 +15,9 @@ Nothing depends on the run date except where the world ends.
   activity): this dlt source, merged on the document path into the same
   dataset as the real copy (dlt/pipeline.py simsplit). The real users load
   replaces its table, so this must run after it.
-- Telemetry tables (usage_events, error_reports): load_telemetry(), which
-  appends whole days that hold no fake rows yet. They are Terraform-managed
+- Telemetry tables (usage_events, error_reports, and the crm service's
+  crm_sends with the op_notification_opened events that answer them):
+  load_telemetry(), which appends whole days that hold no fake rows yet. They are Terraform-managed
   tables, so they go through plain BigQuery load jobs: dlt would add its own
   columns to them.
 
@@ -59,6 +60,11 @@ FORMS = [("form_expense_submitted", 0.8), ("form_expense_abandoned", 0.2), ("for
          ("form_group_abandoned", 0.3), ("form_settlement_submitted", 0.9)]
 OPS = [("op_add_expense", 450), ("op_edit_expense", 380), ("op_create_group", 600),
        ("op_add_member", 300), ("op_add_settlement", 420), ("op_sign_in_with_google", 1800)]
+# Notifications (sim-split R-9) start later than the rest, like the feature.
+CRM_START = date(2026, 11, 1)
+OPENED = "op_notification_opened"
+CAMPAIGN = "fake-campaign-welcome"
+
 ERRORS = [
     ("FirebaseException", "permission-denied on groups/{id}", 5),
     ("shown:SocketException", "Failed host lookup", 4),
@@ -368,32 +374,94 @@ def _error_reports(user, session):
     }]
 
 
+# ── Notifications (R-9): what the crm service sent, and which were opened ───
+
+def _sends(user, day):
+    """Pushes to an account on a day: group activity, the Sunday settle
+    reminder and one welcome campaign. A few tokens are stale."""
+    if day < CRM_START or day < user["created_at"].date():
+        return []
+    rng = _rng("sends", user["uid"], day)
+    sources = []
+    if rng.random() < 0.25:
+        sources += [("trigger", "group-activity", "group_activity")] * rng.choice([1, 1, 2])
+    if day.weekday() == 6 and rng.random() < 0.4:
+        sources.append(("schedule", "settle-reminder", "settle_reminder"))
+    if day == CRM_START + timedelta(days=7):
+        sources.append(("campaign", CAMPAIGN, "updates"))
+    sends = []
+    for i, (source, source_id, category) in enumerate(sources):
+        at = _at(day, rng, 8, 21)
+        sends.append({
+            "sent_at": at.isoformat(), "message_id": _id("msg", user["uid"], day, i),
+            "source": source, "source_id": source_id, "category": category, "uid": user["uid"],
+            "platform": PLATFORMS[int(user["uid"][-1], 16) % len(PLATFORMS)],
+            "locale": LANGUAGES[int(user["uid"][-2], 16) % len(LANGUAGES)],
+            "result": rng.choices(["sent", "invalid_token", "failed"], weights=[93, 5, 2])[0],
+        })
+    return sends
+
+
+def _opens(user, day):
+    """Taps on delivered pushes, as the app logs them: an op event whose result
+    is <source>:<source_id>, in the account's first session of the day."""
+    session = next(iter(_sessions(user, day)), None) if _active(user, day) else None
+    if session is None:
+        return []
+    rows = []
+    for send in _sends(user, day):
+        rng = _rng("open", send["message_id"])
+        if send["result"] != "sent" or rng.random() > 0.35:
+            continue
+        at = datetime.fromisoformat(send["sent_at"]) + timedelta(minutes=rng.randint(1, 120))
+        rows.append({
+            "received_at": (at + timedelta(seconds=rng.randint(0, 30))).isoformat(),
+            "uid": user["uid"], "session_id": session["id"], "client_time": at.isoformat(),
+            "kind": "op", "name": OPENED, "screen": None,
+            "result": f"{send['source']}_{send['source_id'].replace('-', '_')}", "duration_ms": None,
+            "platform": session["platform"], "app_version": session["version"],
+            "language": session["language"], "online": True,
+        })
+    return rows
+
+
+def _in_sessions(build):
+    def per_day(user, day):
+        if not _active(user, day):
+            return []
+        return [row for session in _sessions(user, day) for row in build(user, session)]
+    return per_day
+
+
 def load_telemetry(project_id, dataset="simsplit_raw"):
-    """Appends fake usage events and error reports for each day in the window
-    that has none yet. Telemetry always lands in simsplit_raw, which every dbt
-    target reads (dbt/models/simsplit/staging/_sources.yml)."""
+    """Appends fake usage events, error reports, notification sends and opens
+    for each day in the window that has none of that kind yet. Telemetry always
+    lands in simsplit_raw, which every dbt target reads
+    (dbt/models/simsplit/staging/_sources.yml). Opens are usage events loaded
+    on their own, so they don't depend on which days already have events."""
     client = bigquery.Client(project=project_id)
     users = _users()
-    for table, id_column, build in (
-        ("usage_events", "uid", _events),
-        ("error_reports", "report_id", _error_reports),
+    for table, id_column, time_column, only, build in (
+        ("usage_events", "uid", "received_at", f"name != '{OPENED}'", _in_sessions(_events)),
+        ("usage_events", "uid", "received_at", f"name = '{OPENED}'", _opens),
+        ("error_reports", "report_id", "received_at", "TRUE", _in_sessions(_error_reports)),
+        ("crm_sends", "message_id", "sent_at", "TRUE", _sends),
     ):
         ref = f"{project_id}.{dataset}.{table}"
         query = (
-            f"SELECT DISTINCT DATE(received_at) AS day FROM `{ref}` "
-            f"WHERE STARTS_WITH({id_column}, 'fake-') AND DATE(received_at) >= @start"
+            f"SELECT DISTINCT DATE({time_column}) AS day FROM `{ref}` "
+            f"WHERE STARTS_WITH({id_column}, 'fake-') AND DATE({time_column}) >= @start AND {only}"
         )
         params = [bigquery.ScalarQueryParameter("start", "DATE", START.isoformat())]
         done = {r.day for r in client.query(query, job_config=bigquery.QueryJobConfig(query_parameters=params))}
         rows = [
             row
             for day in _days() if day not in done
-            for user in users if _active(user, day)
-            for session in _sessions(user, day)
-            for row in build(user, session)
+            for user in users
+            for row in build(user, day)
         ]
         if not rows:
-            print(f"{ref}: nothing to add")
+            print(f"{ref} ({only}): nothing to add")
             continue
         schema = client.get_table(ref).schema
         job = client.load_table_from_json(
@@ -401,4 +469,4 @@ def load_telemetry(project_id, dataset="simsplit_raw"):
             job_config=bigquery.LoadJobConfig(schema=schema, write_disposition="WRITE_APPEND"),
         )
         job.result()
-        print(f"{ref}: added {len(rows)} fake rows for {len({r['received_at'][:10] for r in rows})} days")
+        print(f"{ref} ({only}): added {len(rows)} fake rows for {len({r[time_column][:10] for r in rows})} days")

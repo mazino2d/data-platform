@@ -53,3 +53,16 @@ models:
         tests:
           - accepted_values:
               values: ["android", "ios", "web"]
+  - name: stg_crm_sends
+    description: "One row per push the crm service tried to send (R-9). message_id embeds group IDs."
+    columns:
+      - name: message_id
+        tests: [not_null]
+      - name: source
+        tests:
+          - accepted_values:
+              values: ["trigger", "schedule", "campaign"]
+      - name: result
+        tests:
+          - accepted_values:
+              values: ["sent", "invalid_token", "failed"]

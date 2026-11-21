@@ -32,3 +32,12 @@ models:
     columns:
       - name: report_id
         tests: [not_null]
+  - name: fct_crm_sends
+    description: >
+      One row per push the crm service tried to send (R-9), kept indefinitely. send_id is a hash
+      of the message ID, which embeds group IDs; uid stays after the account is deleted.
+    columns:
+      - name: send_id
+        tests: [unique, not_null]
+      - name: sent_at
+        tests: [not_null]
