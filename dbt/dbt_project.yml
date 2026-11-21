@@ -57,6 +57,14 @@ models:
           +schema: simsplit_metrics
           +materialized: table
           +tags: ["metrics"]
+        # Traits for sim-split's notification audiences (R-9): the only
+        # dataset its crm service account can read. Terraform
+        # (everything-as-code) creates simsplit_crm and its grant in each
+        # environment's project; dbt only writes the table into it.
+        crm:
+          +schema: simsplit_crm
+          +materialized: table
+          +tags: ["crm"]
 
 snapshots:
   data_platform:
