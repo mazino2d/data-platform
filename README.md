@@ -69,6 +69,14 @@ Each project and layer gets its own dataset, named by `dbt/macros/generate_schem
 
 dlt writes raw data to `<project>_raw` with the same prefixes (`dlt/pipeline.py`).
 
+sim-split's layers are `simsplit_staging`, `simsplit_marts` (core), `simsplit_metrics`
+(aggregates for the dashboard) and `simsplit_crm`. `simsplit_crm` holds only
+`user_traits`, the traits sim-split's notification service selects audiences on (R-9):
+no names, emails, amounts or free text, with the dbt contract enforced. Terraform in
+everything-as-code creates the dataset in each environment's project and grants it to
+sim-split's crm service account; the `simsplit_crm` DAG task (after `simsplit_core`) only
+writes the table into it.
+
 ---
 
 ## Jaffle Shop

@@ -1,0 +1,67 @@
+version: 2
+
+# Traits only: no name, email, amount or free text may appear here. The
+# simsplit_crm dataset is shared with sim-split's crm service account, which
+# selects notification audiences on these columns (sim-split R-9). Its
+# crm/traits.yaml lists the same columns, so the contract keeps them stable.
+models:
+  - name: user_traits
+    description: >
+      One row per account that exists today (from dim_user, so a deleted account's row is gone
+      after the next daily run) with the traits notification audiences select on. Ages in days
+      are whole days before the run.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: uid
+        data_type: string
+        description: "Account uid."
+        constraints:
+          - type: not_null
+        tests: [unique, not_null]
+      - name: platform
+        data_type: string
+        description: "'android' or 'web': platform of the account's latest usage event (NULL if none)."
+        tests:
+          - accepted_values:
+              values: ["android", "web"]
+      - name: language
+        data_type: string
+        description: "'en' or 'vi': app language of the latest usage event that has one (NULL if none)."
+        tests:
+          - accepted_values:
+              values: ["en", "vi"]
+      - name: app_version
+        data_type: string
+        description: >
+          App version of the latest usage event, CalVer such as 2026.11.22 with any build number or
+          dev suffix stripped (NULL if none).
+      - name: signup_days
+        data_type: int64
+        description: "Whole days since the account was created."
+      - name: last_active_days
+        data_type: int64
+        description: "Whole days since the account's latest usage event, by the endpoint's clock (NULL if none)."
+      - name: sessions_30d
+        data_type: int64
+        description: "Distinct sessions with a usage event in the last 30 days (0 if none)."
+      - name: open_groups
+        data_type: int64
+        description: >
+          Groups the account belongs to (a member it claimed, member not deleted) that are neither
+          archived nor deleted.
+      - name: shared_groups
+        data_type: int64
+        description: "Open groups with at least two distinct accounts among their claimed members."
+      - name: owes_groups
+        data_type: int64
+        description: "Open groups where the account's net balance is negative by at least one smallest currency unit."
+      - name: owed_groups
+        data_type: int64
+        description: "Open groups where the account's net balance is positive by at least one smallest currency unit."
+      - name: oldest_unsettled_days
+        data_type: int64
+        description: >
+          Whole days since the oldest non-deleted expense (by creation time) in the open groups where
+          the account owes (NULL if it owes nothing).

@@ -132,6 +132,20 @@ jobs:
       environment: dev
       ref: ${{ github.sha }}
 
+  simsplit_crm_dev:
+    # Traits for sim-split's notification audiences (simsplit_crm.user_traits), after the core models.
+    needs: [plan, simsplit_core_dev]
+    if: needs.plan.outputs.dev == 'true'
+    uses: ./.github/workflows/dag-task.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      task: simsplit_crm
+      dbt: true
+      environment: dev
+      ref: ${{ github.sha }}
+
   simsplit_metrics_dev:
     # Aggregates for the Evidence dashboard (no uid, name or email).
     needs: [plan, simsplit_core_dev]
@@ -184,6 +198,20 @@ jobs:
       id-token: write
     with:
       task: simsplit_core
+      dbt: true
+      environment: prd
+      ref: ${{ needs.plan.outputs.prd_ref }}
+
+  simsplit_crm_prd:
+    # Traits for sim-split's notification audiences (simsplit_crm.user_traits), after the core models.
+    needs: [plan, simsplit_core_prd]
+    if: needs.plan.outputs.prd == 'true'
+    uses: ./.github/workflows/dag-task.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      task: simsplit_crm
       dbt: true
       environment: prd
       ref: ${{ needs.plan.outputs.prd_ref }}

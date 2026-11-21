@@ -57,6 +57,11 @@ sim-split data is personal (names, emails, amounts): `dim_user` is rebuilt from 
 `users` load and never snapshotted, so a deleted account leaves the warehouse with the next
 daily run, while facts keep only its uid.
 
+`simsplit_crm` (layer `marts/crm`, tag `crm`, DAG task `simsplit_crm`) holds only
+`user_traits`, read by sim-split's crm service account: traits only (no names, emails,
+amounts or free text), contract enforced. Terraform in everything-as-code creates that
+dataset and its grant in both projects; dbt only writes the table, so apply Terraform first.
+
 ### dbt layout
 
 ```
