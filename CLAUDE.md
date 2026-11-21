@@ -50,8 +50,9 @@ Environments with `GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVI
 
 dlt writes raw data to `<source>_raw` with the same prefixes; the project's `_sources.yml`
 computes the same name. Exception: sim-split's `error_reports` and `usage_events` are written
-by its telemetry endpoint (one per environment) to the project's `simsplit_raw` only, so the
-`simsplit_telemetry` source reads `simsplit_raw` from every target.
+by its telemetry endpoint, and `crm_sends` by its crm service (one per environment), to the
+project's `simsplit_raw` only, so the `simsplit_telemetry` source reads `simsplit_raw` from
+every target.
 
 sim-split data is personal (names, emails, amounts): `dim_user` is rebuilt from a replaced
 `users` load and never snapshotted, so a deleted account leaves the warehouse with the next

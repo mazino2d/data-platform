@@ -36,7 +36,8 @@ sources:
   - name: simsplit_telemetry
     description: >
       Error reports and usage events written by sim-split's telemetry endpoint of the same
-      environment (Cloud Run, BigQuery Storage Write API), plus fake rows in dev. Only the
+      environment (Cloud Run, BigQuery Storage Write API), and the pushes its crm service sent,
+      plus fake rows in dev. Only the
       bare simsplit_raw has them, so every target reads it.
     schema: simsplit_raw
     tables:
@@ -47,4 +48,11 @@ sources:
       - name: usage_events
         columns:
           - name: uid
+            tests: [not_null]
+      - name: crm_sends
+        description: >
+          One row per push the crm service tried to send (sim-split R-9), appended by the service
+          of the same environment. message_id embeds group IDs: never expose it.
+        columns:
+          - name: message_id
             tests: [not_null]

@@ -22,3 +22,11 @@ models:
     description: "Activation funnel per sign-up week, for existing accounts."
   - name: metrics_weekly_activity
     description: "Groups, expenses and settlements created per week."
+  - name: metrics_notifications
+    description: >
+      Pushes per day, source (trigger, schedule, campaign; unknown for opens from builds that
+      logged the category) and source_id: send results, distinct recipients of any attempt,
+      opens on that day, open rate (opens / sent) and invalid-token rate (invalid_token / sends).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [day, source, source_id]
