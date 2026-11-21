@@ -418,7 +418,7 @@ def _opens(user, day):
             "received_at": (at + timedelta(seconds=rng.randint(0, 30))).isoformat(),
             "uid": user["uid"], "session_id": session["id"], "client_time": at.isoformat(),
             "kind": "op", "name": OPENED, "screen": None,
-            "result": f"{send['source']}:{send['source_id']}", "duration_ms": None,
+            "result": f"{send['source']}_{send['source_id'].replace('-', '_')}", "duration_ms": None,
             "platform": session["platform"], "app_version": session["version"],
             "language": session["language"], "online": True,
         })
